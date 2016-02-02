@@ -1,0 +1,13 @@
+#!/bin/bash
+
+if [ -z "$__INCLUDE_CONFIG__" ]; then
+__INCLUDE_CONFIG__=defined
+
+if [ -z "$IS_GIT_SERVER" ]; then
+	Source "include/variable"
+fi
+
+Source "include/projects"
+
+fi # header guard
+# vim:ft=sh

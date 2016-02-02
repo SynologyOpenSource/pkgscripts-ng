@@ -1,0 +1,464 @@
+#!/bin/bash
+# Copyright (c) 2000-2016 Synology Inc. All rights reserved.
+
+if [ -z "$__INCLUDE_BUILD__" ]; then
+__INCLUDE_BUILD__=defined
+
+Source "include/config"
+Source "include/check"
+Source "include/platforms"
+Source "include/check"
+Source "include/applyEnv"
+
+PlatformOpts=`AllPlatformOptionsComma`
+BuildDefaultArgs="acCNdhx:r:p:jJSgT"
+BuildDefaultLongArgs="${PlatformOpts}platform:,\
+clean,noclean,cleanonly,dontask,\
+jobs:,without-ccache,with-ccache:,with-clean-ccache,\
+with-debug,help"
+
+MakeSilent="Yes"
+MakeJobs="Yes"
+WithCcache="Yes"
+WithCleanCcache="No"
+WithDebug="No"
+
+BUILD_DEP_LEVEL=""
+DEP_OPT=""
+
+CFLAGS=""
+LDFLAGS=""
+
+
+# This function will parse default build args
+# InputProjs and UnHandledOpt will be export
+ParseBuildDefaultArgs(){
+	unset InputProjs
+	unset UnHandledOpt
+
+	while [ -n "$1" ]; do # {{{
+		if IsPlatformOption $1; then
+			AskPlatform $1
+			shift
+			continue
+		fi
+
+		case "$1" in
+		# platforms
+		"-p" | "--platform")
+			AskPlatform "--$2"
+			shift
+			;;
+		# "make clean" options
+		"-C" | "--cleanonly")
+			MakeClean="Yes"
+			CleanOnly="Yes"
+			;;
+		"-c" | "--clean" | "--dontask")
+			MakeClean="Yes"
+			;;
+		"-N" | "--noclean")
+			MakeClean="No"
+			;;
+		"-d" | "--with-debug")
+			WithDebug="Yes"
+			;;
+		"--help" | "-h")
+			Usage
+			exit 0
+			;;
+		"-j")
+			MakeJobs="Yes"
+			;;
+		"-J")
+			MakeJobs="No"
+			;;
+		"--jobs")
+			JOBS="$2"
+			if [ "$2" -gt 1 ]; then
+				MakeJobs="Yes"
+			else
+				MakeJobs="No"
+			fi
+			shift
+			;;
+		"-S")
+			MakeSilent="No"
+			;;
+		"--without-ccache")
+			WithCcache="No"
+			;;
+		"--with-ccache")
+			WithCcache="Yes"
+			if [[ "$2" =~ ^[0-9]+(\.[0-9]+)?[KMG]?$ ]]; then
+				CCACHE_SIZE="$2"
+				shift
+			fi
+			;;
+		"--with-clean-ccache")
+			WithCcache="Yes"
+			WithCleanCcache="Yes"
+			;;
+		"-x"|"-r")
+			DEP_OPT="$1"
+
+			OPT_TMP=$2
+			REG_TMP="^[0-9]+$"
+			if [[ $OPT_TMP =~ $REG_TMP ]] ; then	# valid level number, set as args
+				BUILD_DEP_LEVEL="$2"
+				shift
+			else 				# if it's not a valid level number, skip it and reset OPTIND to last one
+				BUILD_DEP_LEVEL="0"		# 0 means to traverse all dependencies
+			fi
+			;;
+		"-T")
+			ENABLE_LTTNG_FLAGS=true
+			;;
+		"--")
+			# remaining are project names
+			shift
+			break
+			;;
+		*)
+			[ -n "$UnHandledOpt" ] && UnHandledOpt="$UnHandledOpt $1" || UnHandledOpt="$1"
+			shift
+			if [ "$1" = '--' ]; then
+				shift
+				break
+			elif [[ "$1" =~ "-" ]]; then
+				continue
+			else
+				UnHandledOpt="$UnHandledOpt $1"
+			fi
+			;;
+		esac
+		shift
+	done # }}}
+	InputProjs=$@
+
+	if [ -z "$BUILD_OPT" ]; then
+		# call again without parameters 
+		# to prompt user interactively
+		AskPlatform
+	fi
+}
+
+NormalizeBuildProjects() {
+	local projName=
+	local projBaseName=
+	local proj=
+	local projList=
+
+	# Get basename for each project which are provide by argument.
+	for projName in "$@"; do
+		projBaseName=`basename $projName`
+		projList="$projList $projBaseName"
+	done
+
+	projList=$(echo $projList | sed 's/ /\n/g' | sort | uniq)
+	if [ -z "$projList" ]; then
+		CheckErrorOut 2 "You have to specify at least one poject name."
+	fi
+
+	if ! projList=$(${ScriptsDir}/ProjectDepends.py ${DEP_OPT} ${BUILD_DEP_LEVEL} -p "${PLATFORM_ABBR}" ${projList}) ; then
+		CheckErrorOut 1 "Failed to get dependency list !!"
+	fi
+
+	if [ -z "${projList}" ]; then
+		CheckErrorOut 2 "No Project actually needed to be built."
+	fi
+
+	echo $projList
+	return 0
+}
+
+ExcludeProjects() {
+	local projList=$@
+	local retProjs=
+
+	retProjs=$(ExcludeList "$projList" "$(getPlatformExcludeProjs)")
+	BuildMachineOnly || retProjs=$(ExcludeList "$retProjs" ".*-virtual-protection dsm-Protection")
+	echo $retProjs
+}
+
+CheckCleanSource() {
+	if [ -z $MakeClean ]; then
+		printf "Do you want to make disclean before compile?(Y/N)[Y]:"
+		read MakeClean
+
+		if [ "$MakeClean" != "N" -a "$MakeClean" != "n" ]; then
+			MakeClean="Yes"
+		fi
+	fi
+}
+
+# $1: hook for setup build env
+SetupBuildEnv() # {{{
+{
+	local hook=$1
+
+	# Setup platform-dependent environment
+	LoadPlatformRelated || exit 1
+
+	SetupDSMBuildNumber
+	SetupCcache
+	CheckCleanSource
+
+	export SYNO_PLATFORM="${BUILD_TARGET}"
+	JOBS=${JOBS:-4}
+
+	# Execute build env hook
+	if [ -n "$hook" ] && [ "$(type -t $hook)" = "function" ]; then
+		$hook
+	fi
+
+	[ -d "$DebDevBuild" ] && rm -rf $DebDevBuild/* || mkdir -p $DebDevBuild
+	[ -d "$DebPkgDir" ] || mkdir -p $DebPkgDir
+
+	mkdir -p $LogDir
+	CheckErrorOut $? "Failed to create $LogDir"
+	GenerateEnvMak
+} #}}}
+
+GenerateSelector() #{{{
+{
+	local file="/env.mak"
+
+	cat << EOF > $file
+ifdef BUILD_ARCH
+	ifeq ("\$(BUILD_ARCH)", "64")
+		include /env64.mak
+	else
+		include /env32.mak
+	endif
+endif
+EOF
+} #}}}
+
+WriteEnvToFile() {
+	local file="$1"
+
+	rm $file
+
+	# env.mak and env64.mak
+	echo "SOURCE_DIR=$SourceDir" >> $file
+	echo "ToolChainDir=$ToolChainDir" >> $file
+	echo "ToolChainSysRoot=${ToolChainSysRoot}" >> $file
+	echo "PLATFORM_ABBR=$PLATFORM_ABBR" >> $file
+	echo "SYNO_PLATFORM=$SYNO_PLATFORM" >> $file
+	echo "ConfigOpt=\"$ConfigOpt\"" >> $file
+	echo "HOST=$HOST" >> $file
+	echo "ToolChainPrefix=$ToolChainPrefix" >> $file
+	echo "ToolChainInclude=$ToolChainInclude" >> $file
+	echo "ToolChainLib=$ToolChainLib" >> $file
+	echo "ARCH=$ARCH" >> $file
+	echo "CFLAGS=$CFLAGS" >> $file
+	echo "CXXFLAGS=$CXXFLAGS" >> $file
+	echo "LDFLAGS=$LDFLAGS" >> $file
+	echo "CC=${ToolChainPrefix}ccache-gcc" >> $file
+	echo "CXX=${ToolChainPrefix}ccache-g++" >> $file
+	echo "LD=$LD" >> $file
+	echo "AR=$AR" >> $file
+	echo "STRIP=$STRIP" >> $file
+	echo "STRIP_ORI=$STRIP_ORI" >> $file
+	echo "RANLIB=$RANLIB" >> $file
+	echo "NM=$NM" >> $file
+	echo "READELF=$READELF" >> $file
+	echo "DSM_BUILD_NUM=$DSM_BUILD_NUM" >> $file
+	echo "DSM_SHLIB_MAJOR=$DSM_SHLIB_MAJOR" >> $file
+	echo "DSM_SHLIB_MINOR=$DSM_SHLIB_MINOR" >> $file
+	echo "DSM_STAGE=$DSM_STAGE" >> $file
+	echo "SynoDir=$SynoDir" >> $file
+	echo "SynoIncludeDir=$SynoIncludeDir" >> $file
+	echo "SynoLibDir=$SynoLibDir" >> $file
+	echo "SynoBinDir=$SynoBinDir" >> $file
+	echo "BUILD_ARCH=$BUILD_ARCH" >> $file
+	echo "SysRootPrefix=$ToolChainSysRoot/usr" >> $file
+	echo "SysRootInclude=$ToolChainSysRoot/usr/include" >> $file
+	echo "SysRootLib=$ToolChainSysRoot/usr/lib" >> $file
+	echo "PLATFORM_FAMILY=$PLATFORM_FAMILY" >> $file
+
+	if Is64BitPlatform; then
+		echo "GrubToolChainDir=$GrubToolChainDir64" >> $file
+		echo "GrubConfigOpt=\"$GrubConfigOpt64\"" >> $file
+		echo "GrubToolChainPrefix=$GrubToolChainPrefix64" >> $file
+		echo "GrubToolChainInclude=$GrubToolChainInclude64" >> $file
+		echo "GrubToolChainLib=$GrubToolChainLib64" >> $file
+		echo "GrubCFLAGS=$GrubCFLAGS64" >> $file
+		echo "GrubLDFLAGS=$GrubLDFLAGS64" >> $file
+		echo "GrubCC=${GrubToolChainPrefix64}ccache-gcc" >> $file
+		echo "GrubCXX=${GrubToolChainPrefix64}ccache-g++" >> $file
+		echo "GrubLD=$GrubLD64" >> $file
+		echo "GrubAR=$GrubAR64" >> $file
+		echo "GrubSTRIP=$GrubSTRIP64" >> $file
+		echo "GrubRANLIB=$GrubRANLIB64" >> $file
+		echo "GrubNM=$GrubNM64" >> $file
+	fi
+
+	return 0
+}
+
+GenerateEnvMak() # {{{
+{
+	local arch=
+	local supportArch="32"
+
+	if Is64BitPlatform; then
+		supportArch="$supportArch 64"
+	fi
+
+	# /env.mak
+	GenerateSelector
+
+	# /env32.mak and /env64.mak
+	for arch in $supportArch; do
+		ApplyBuildEnv "$arch"
+		WriteEnvToFile "/env${arch}.mak"
+	done
+
+	return 0
+} # }}}
+
+SetupCcache() {
+	if [ "${WithCcache}" = "Yes" ]; then
+		CCACHE_BIN="/usr/bin/ccache"
+
+		if [ ! -x ${CCACHE_BIN} ]; then
+			cat << EOF
+
+Binary ${CCACHE_BIN} doesn't exist.
+Use script SynoUpdate --single $SynoBaseProj to check out it, and run SynoBase first.
+EOF
+			exit 2
+		fi
+
+		export CCACHE_DIR="/ccaches/${PLATFORM_ABBR}"
+		export CCACHE_NOCOMPRESS=YES
+		export CCACHE_SLOPPINESS=file_macro,include_file_mtime,time_macros
+		mkdir -p ${CCACHE_DIR}
+		chmod 1777 ${CCACHE_DIR}
+		$CCACHE_BIN -M ${CCACHE_SIZE:-$DEFAULT_CCACHE_SIZE}
+		$CCACHE_BIN -z
+
+		if [ "${WithCleanCcache}" = "Yes" ]; then
+			$CCACHE_BIN --clear
+		fi
+	fi
+}
+
+ActionsBeforeDebPack() {
+	# get SysRoot path
+	local sysRootPath=$ToolChainSysRoot
+
+	# move file to SysRoot
+	mkdir -p $DebDevBuild/$sysRootPath
+	mv $DebDevDir/* $DebDevBuild/$sysRootPath
+
+	# remove SysRoot path in pc file
+	PC_LIST=`find $DebDevBuild -name "*.pc"`
+	for pc in $PC_LIST; do
+		sed -i "s|${ToolChainSysRoot}||g" $pc
+	done
+
+	# remove all .la file
+	find $DebDevBuild -name '*.la' | xargs rm -rf
+}
+
+ReplaceSynoSysRoot() {
+	local configFile=$@
+	for file in $configFile; do
+		if [ ! -f "$file" ]; then
+			ERROR "" "Replace sysroot fail! $file not exist."
+			return 1
+		fi
+		sed -i "s|@SYNO_SYSROOT@|${ToolChainSysRoot}|g" $file
+	done
+}
+
+AssignMakeFlags() {
+	local proj="$1"
+
+	MAKE_FLAGS=""
+	if [ "Yes" == "$MakeSilent" ]; then
+		MAKE_FLAGS="$MAKE_FLAGS -s -w"
+	fi
+
+	if [ "Yes" == "$MakeJobs" ]; then
+		# Check if we can build this project in parallel
+		MAKE_FLAGS="$MAKE_FLAGS -j $JOBS"
+		# Keep completely quite if (MakeSilent && MakeJons)
+		if [ "Yes" == "$MakeSilent" ]; then
+			MAKE_FLAGS="$MAKE_FLAGS --no-print-directory"
+		fi
+	fi
+}
+
+SetupBuildProjEnv(){
+	local proj=$1
+	unset InstallDevScript
+	export BuildingProj=$proj
+	
+	if Is64BitProject "$proj"; then
+		ApplyBuildEnv "64"
+	else
+		ApplyBuildEnv "32"
+	fi
+
+	AssignMakeFlags $proj
+
+	#clean /deb/build dir
+	rm -rf $DebDevDir/*
+	rm -rf $DebDevBuild/*
+}
+
+
+RunBuildScript() # {{{
+{
+	local proj="$1"
+	local buildScript=
+
+	if [ $# -ne 1 ]; then
+		ERROR "Wrong number of parameters to $FUNCNAME."
+		return 1
+	fi
+	cd $SourceDir
+	CheckErrorOut $? "Failed to cd $SourceDir"
+
+	if [ ! -d "$proj" ]; then
+		ERROR "Project $proj doesn't exist."
+		INFO "" "Use script SynoUpdate $proj to check out it."
+		return 1
+	fi
+
+	if ! buildScript=`findBuildScript $proj`; then
+		ERROR "There is no build scripts for $proj"
+		return 1
+	fi
+
+	INFO "SCRIPT" "build script: ${buildScript}"
+	if ! cd $proj; then
+		ERROR "can not cd to $proj"
+		return 1
+	fi
+
+	INFO "======= Run build script ======="
+	(. $buildScript)
+
+	CheckProjectStatus build $proj > /dev/null
+	return
+} # }}}
+
+BuildProject() {
+	local ret=
+	local proj=$1
+
+	if ! RunBuildScript $proj; then
+		ERROR "Build project fail!"
+		return 1
+	fi
+
+	return $?
+}
+
+fi
+# vim:ft=sh

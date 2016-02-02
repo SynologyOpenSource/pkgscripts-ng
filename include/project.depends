@@ -1,0 +1,33 @@
+# first part, for project dependency
+[dynamic variable list]
+list="${Kernel} ${Desktop}"
+
+[variables]
+${KernelPacks}="synobios"
+
+[project dependency]
+${KernelPacks}="${Kernel}"     # must set here, to connect KernelPacks to KernelProjects
+
+[64bit project dependency]
+
+[${Desktop}]
+default="dsm"
+
+#second part, kernel project for each platform
+[${Kernel}]
+x64="linux-3.10.x"
+bromolow="linux-3.10.x"
+cedarview="linux-3.10.x"
+evansport="linux-3.x"
+avoton="linux-3.10.x"
+braswell="linux-3.10.x"
+6281="linux-2.6.32"
+qoriq="linux-2.6.32"
+armadaxp="linux-3.x"
+armada370="linux-3.x"
+armada375="linux-3.x"
+comcerto2k="linux-3.x"
+alpine="linux-3.10.x-bsp"
+alpine4k="linux-3.10.x-bsp"
+monaco="linux-3.10.x-bsp"
+armada38x="linux-3.10.x-bsp"

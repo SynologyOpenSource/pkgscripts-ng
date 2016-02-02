@@ -1,0 +1,405 @@
+#!/bin/bash
+# Copyright (c) 2000-2016 Synology Inc. All rights reserved.
+
+if [ -z "$__INCLUDE_CHECK__" ]; then
+__INCLUDE_CHECK__=defined
+
+Source include/init
+Source "include/config"
+Source "include/platforms"
+Source "include/errors"
+
+# Build system will select virtual build script first and then projName script in build.
+CheckScript() {
+	local projName="$1"
+	local type=$2
+	local findScript=
+
+	if [ -f "$SourceDir/$projName/$ConfDir/$type" ]; then
+		findScript="$SourceDir/$projName/$ConfDir/$type"
+	elif [ -f "$ScriptsDir/$type/$projName" ]; then
+		findScript="$ScriptsDir/$type/$projName"
+	fi
+
+	echo $findScript
+	return 0
+}
+
+FindScript() {
+	local projName=$1
+	local type=$2
+	local script=
+	local removeArchExt="-32"
+	# if default build 32bit, user will input project-virtual-64.
+	if [ "$DefaultBuild32Bit" = "yes" ]; then
+		removeArchExt="-64"
+	fi
+
+	script=$(CheckScript $projName $type)
+	if [ -z "$script" ]; then
+		# for project-virtual-junior-32
+		script=$(CheckScript ${projName//$removeArchExt/} $type)
+		if [ -z "$script" ]; then
+			# for project-virtual-32
+			script=$(CheckScript ${projName//-virtual$removeArchExt/} $type)
+		fi
+	fi
+
+	if [ -n "$script" ]; then
+		echo $script
+		return 0
+	else
+		return 1
+	fi
+}
+
+findBuildScript() {
+	local projName=$1
+	FindScript "$projName" "build"
+}
+
+findInstallDevScript() {
+	local projName=$1
+	FindScript "$projName" "install-dev"
+}
+
+findInstallScript() {
+	local projName=$1
+	FindScript "$projName" "install"
+}
+
+findDependConf() {
+	local projName="$1"
+	local conf=$(FindScript "$projName" "depends")
+	if [ -n "$conf" ]; then
+		echo "$conf"
+	else
+		echo "$ScriptsDir/$GlobalDependConf"
+	fi
+}
+
+CheckPermission()
+{
+	# Only root can run this
+	id | grep "uid=0" >/dev/null
+	if [ $? != "0" ]; then
+		echo "ERROR: This script must be run as root";
+		echo "";
+		exit 1;
+	fi
+
+	# Stop!! If /root/.chroot does not exit
+	if [ ! -f /root/.chroot ]; then
+		echo "ERROR: Please chroot first!!"
+		echo ""
+		exit 1;
+	fi
+}
+
+# $1: target to find, else: list to search
+CheckInList() {
+	[ $# -lt 1 ] && CheckErrorOut 1 "Wrong number of parameters to $FUNCNAME()."
+	local target="$1" proj=
+	shift
+	for proj in $@; do
+		[ $proj = $target ] && return 0
+	done
+	return 1
+}
+
+CheckErrorLog()
+{
+	local errors
+	local warns
+	local logFile
+	local warnCount
+	local allProjCount=0
+	local errProjCount=0
+	local warnProjCount=0
+	local ret=
+	local logType=$1
+	shift
+	local projectList=$@
+	local errorFile="${LogDir}/error.$logType"
+
+	if [ -r "$errorFile" ]; then
+		mv -f $errorFile ${errorFile}.old
+	fi
+
+
+	for proj in $projectList; do
+		logFile="${LogDir}/${proj}.$logType"
+		result=$(CheckProjectStatus $logType $proj)
+		ret=$?
+		if [ $ret -eq 1 ]; then
+			echo "Result file $logFile doesn't exist or isn't readable." 2>&1 | tee -a $errorFile
+			echo "Cannot check any information about compiling error(s)."
+			echo ""
+			errors="Y"
+		else
+			if [ $ret -ne 0 ]; then
+				echo "I got the following error:" >> $logFile
+				echo -e "$result" >> $logFile
+				echo "########################################################"
+				echo "      Error(s) occurred on project \"$proj\"" 2>&1 | tee -a $errorFile
+				echo "########################################################"
+				errors="Y"
+				errProjCount=$(( $errProjCount + 1 ))
+			fi
+			if [ "$1" = "build" ]; then
+				warnCount=`grep -s "warning:" $logFile | wc -l`
+				if [ 0 -ne $warnCount ]; then
+					printf "%-30s:\t%4d warning(s)\n" $proj $warnCount
+					warns="Y"
+					warnProjCount=$(( $warnProjCount + 1 ))
+				fi
+			fi
+		fi
+		allProjCount=$(( $allProjCount + 1 ))
+	done
+	echo -n "$allProjCount projects, $errProjCount failed"
+	if [ "$1" = "build" ]; then
+		echo ", $warnProjCount have warnings."
+	else
+		echo "."
+	fi
+
+	echo ""
+	if [ "$errors" = "Y" ]; then
+		ERROR "Check [${errorFile}] for fixing errors."
+		return 1
+	fi
+	return 0
+}
+
+# check error code, if error code != 0, print message and exit
+# Usages:
+#	CheckErrorOut ErrorCode Message
+CheckErrorOut()
+{
+	if [ $1 != 0 ]; then
+		echo "$2" >&2;
+		exit $1;
+	fi
+}
+
+INFO(){
+	if [ $# -lt 2 ]; then
+		echo -e "[INFO] $1"
+	else
+		if [ -z "$1" ]; then
+			echo -e [INFO] $2
+		else
+			echo -e [$1] $2
+		fi
+	fi
+}
+
+ERROR(){
+	if [ $# -lt 2 ]; then
+		echo -e "\n[Error] $1\n" >&2
+	else
+		if [ -z "$1" ]; then
+			echo -e [Error] $2 >&2
+		else
+			echo -e [$1] $2 >&2
+		fi
+	fi
+}
+
+
+ShowTimeCost()
+{
+	TAG_INTERNAL=""
+	#echo $*
+
+	if [ -n "$3" ]; then
+		TAG_INTERNAL="[$3]"
+	fi
+
+	D_INT0=$1
+	D_INT1=$2
+
+	DIFF_INT=$((${D_INT1}-${D_INT0}))
+	DIFF_SEC=$((${DIFF_INT}%60))
+	DIFF_MIN=$(((${DIFF_INT}/60)%60))
+	DIFF_HOUR=$(((${DIFF_INT}/3600)%60))
+
+	printf "Time cost: %02d:%02d:%02d %s\n" ${DIFF_HOUR} ${DIFF_MIN} ${DIFF_SEC}    ${TAG_INTERNAL}
+}
+
+CheckTimeCostLog()
+{
+	local logType=$1
+	shift
+	local projectList=$@
+	local logFile=
+	local result=
+
+	echo -e "\n----------------- Time cost statistics -----------------"
+
+	for proj in $projectList;
+	do
+		logFile="${LogDir}/${proj}.$logType"
+		if [ -r "$logFile" ]; then
+			#echo "file: ${logFile}"
+			result=`grep "Time cost:" $logFile`
+			echo $result
+		fi
+	done
+
+	echo ""
+}
+
+# FIXME for test
+Debug()
+{
+	return 0
+	[ $# -ne 2 ] && return 0
+	echo -e "\033[$1m$2\033[0m"
+}
+
+_get_key_value()
+{
+	local key="$1"
+	local file="$2"
+	local val=
+
+	if [ -z "$key" -o ! -f "$file" ]; then
+		echo "Error: _get_key_value failed. key is empty or file not found."
+		return 1
+	fi
+
+	val="$(grep "^$key=" "$file" | cut -d'"' -f2)"
+	echo "$val"
+}
+
+GetDSMBuildNumber() {
+	_get_key_value "buildnumber" "$VERSION_FILE"
+}
+
+GetDSMMajorNumber()
+{
+	_get_key_value "majorversion" "$VERSION_FILE"
+}
+
+GetDSMMinorNumber()
+{
+	_get_key_value "minorversion" "$VERSION_FILE"
+}
+
+Is64BitProject() {
+	local Proj=$1
+	local ProjExt=
+
+	Is32BitProject $Proj && return 1
+	return 0
+}
+
+Is32BitProject() { #{{{
+	local ProjExt=""
+	local Proj="$1"
+
+	if ! Is64BitPlatform; then
+		return 0
+	fi
+
+	return 1
+} #}}}
+
+getPlatformExcludeProjs() {
+	local platformExcludeProj=
+
+	if [ "$DefaultBuild32Bit" = "yes" ]; then
+		platformExcludeProj=".*-virtual-64$"
+	else
+		platformExcludeProj=".*-virtual-32$"
+	fi
+
+	if ! Is64BitPlatform; then
+		echo $platformExcludeProj
+		return
+	fi
+	return
+}
+
+ExcludeList() {
+	local list="$1"
+	local excludeList="$2"
+
+	if [ -z "${excludeList}" ]; then
+		echo $list
+		return 0
+	fi
+
+	local excludeArgument="^(`echo $excludeList | sed 's/ /|/g'`)\$"
+	echo $list | sed 's/ /\n/g' | grep -vE "${excludeArgument}"
+
+	return 0
+}
+
+GetBuildPhase() {
+	local _file=$1
+	local _phase=
+
+	[ -z "$_file" ] && _file=$VERSION_FILE
+
+	_phase="`grep buildphase $_file | cut -d'"' -f2`"
+
+	if [ -n "$_phase" ]; then
+		echo $_phase
+		return 0
+	else
+		return 1
+	fi
+}
+
+GetBuildStage() {
+	local version="$1"
+	local phase=$2
+
+	[ -z "$phase" ] && phase=$(GetBuildPhase $version)
+
+	case $phase in
+		"beta"|"release"|"hotfix")
+			echo release
+			;;
+		"dev"|"alpha"|"rc")
+			echo development
+			;;
+		*)
+			return 1
+			;;
+	esac
+	return 0
+}
+
+SetupDSMBuildNumber() {
+	unset DSM_BUILD_NUM DSM_SHLIB_MAJOR DSM_SHLIB_MAJOR
+	local file=${1:-$VERSION_FILE}
+	local phase=`GetBuildPhase $file`
+
+	if [ -z "$DSM_STAGE" ]; then
+		# get global info
+		DSM_BUILD_NUM=$(GetDSMBuildNumber "$file")
+		DSM_SHLIB_MAJOR=$(GetDSMMajorNumber "$file")
+		DSM_SHLIB_MINOR=$(GetDSMMinorNumber "$file")
+		DSM_STAGE=$(GetBuildStage $file $phase)
+		if [ $? -ne 0 ]; then
+			ERROR "cannot get build stage"
+			exit 1
+		fi
+	fi
+
+	if [ -z "$DSM_BUILD_NUM" ]; then
+		DSM_BUILD_NUM=`date "+%Y%m%d"`
+	fi
+
+	[ -z "$DSM_SHLIB_MAJOR" ] && DSM_SHLIB_MAJOR=0
+	[ -z "$DSM_SHLIB_MINOR" ] && DSM_SHLIB_MINOR=0
+
+	export DSM_BUILD_NUM DSM_SHLIB_MAJOR DSM_SHLIB_MINOR
+}
+
+fi
+# vim:ft=sh

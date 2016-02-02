@@ -1,0 +1,41 @@
+#!/bin/bash
+# Copyright (c) 2000-2016 Synology Inc. All rights reserved.
+
+if [ -z "$__INCLUDE_INIT__" ]; then
+__INCLUDE_INIT__=defined
+
+CurDir=$(pwd)
+ScriptsDir=$(dirname $(readlink -f "$0"))
+ScriptsDirName=$(basename "$ScriptsDir")
+ScriptsName=$(basename "$0")
+SynoBase=$(dirname "$ScriptsDir")
+SourceDir=$SynoBase/source
+
+UsingPkgScripts() {
+	if [ "$ScriptsDirName" = "lnxscripts" ]; then
+		return 1
+	elif [ "$ScriptsDirName" = "branchscripts" ]; then
+		return 1
+	elif [ "$ScriptsDirName" = "pkgscripts" -o "$ScriptsDirName" = "pkgscripts-ng" ]; then
+		return 0
+	else
+		echo -e "Error! Using lnxscripts or pkgscripts?"
+		exit 1
+	fi
+}
+
+Source() {
+	local script=${ScriptsDir}/$1
+	local suffix=$2
+
+	[ -f "$script" ] && . ${script}
+
+	if [ -z "$suffix" ]; then
+		UsingPkgScripts && suffix=pkg || suffix=lnx
+	fi
+
+	[ -f ${script}.$suffix ] && . ${script}.$suffix
+}
+
+fi
+# vim:ft=sh

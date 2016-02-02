@@ -1,0 +1,153 @@
+#!/bin/bash
+# Copyright (c) 2000-2016 Synology Inc. All rights reserved.
+
+LANG=""
+LC_ALL=""
+. $(dirname `readlink -f "$0"`)/include/init
+
+Usage() {
+	cat << EOF
+
+Usage
+	`basename $0` [OPTIONS] project_name+
+
+Synopsis
+	Build projects.
+
+Options
+	-p, --platform {platform}
+		Specify target platform.
+	-c, --clean, --dontask
+		Cleanup before building.
+	-C, --cleanonly
+		Cleanup only and exit.
+	-j, --jobs {num}
+		Specify how many jobs to build in parallel. Default is 4.
+	-J	Disable parallel build.
+	-S	Disable silent make.
+	-x {level}
+		Build all dependant projects. Can specify level of dependency.
+		Expand project dependency list, and build them in turn.
+		Cannot be used with -r and default value is 0.
+		For example, -x3 means to traverse dependency to 3rd level (itself as level 0)
+	-r {level}
+		Expand project dependency list reversely, then build all depending projects.
+	-d, --with-debug
+		Build with debugging definition.
+	-N, --noclean
+		Do not cleanup before building.
+	--no-builtin
+		Do not skip built-in projects.
+	--with-ccache {size}
+		Set size of ccache to reduce compiler activities. Default is $DefaultCCacheSize.
+	--with-clean-ccache
+		Build with a cleared ccache.
+	--min-sdk {version}
+		Specify minimum required SDK version (for example, 4.0).
+	-h, --help
+		This help message.
+
+EOF
+}
+
+
+AppendSynoXtraCflags(){
+	SYNO_XTRACFLAGS="-g"
+}
+
+ParseExtArgs() {
+	while [ -n "$1" ]; do # {{{
+		case "$1" in
+		"--no-builtin")
+			IgnoreBuiltin="No"
+			;;
+		"--dont-remove-deb")
+			DontRemoveDeb="Y"
+			;;
+		"--min-sdk")
+			MinSdkVersion="$2"
+			shift
+			;;
+		"--enable-apt")
+			ENABLE_APT="yes"
+			;;
+		*)
+			ERROR "Unknown option: $1"
+			;;
+		esac
+		shift
+	done
+	if [ -z "$BUILD_OPT" ]; then
+		# call again without parameters
+		# to prompt user interactively
+		AskPlatform
+	fi
+}
+
+CollectBuiltinProjs(){
+	local builtinProjs=
+	# Resolve built-in projects
+
+	if [ "$IgnoreBuiltin" = "Yes" -a -f "$ExcludeListFile" ]; then
+		ForceBuildProjects="`cat $ExcludeListFile | sed 's/ /|/g'`"
+		builtinProjs="`echo "$BuiltinProjects" | sed 's/ /\n/g' | grep -vE "$ForceBuildProjects"`"
+	fi
+	echo "$builtinProjs"
+}
+
+Source "include/config"
+Source "include/build"
+
+IgnoreBuiltin="Yes"
+MakeClean="Yes"
+ExcludeListFile="/seen_curr.list"
+ARGS=`getopt -u -l "$BuildDefaultLongArgs,dont-remove-deb,min-sdk:,no-builtin,enable-apt" $BuildDefaultArgs $@`
+
+if [ $? -ne 0 ]; then
+	Usage
+	exit 1
+fi
+set -- $ARGS
+
+CheckPermission
+
+main() {
+	local projectList=
+	local logFile=
+	local builtinProjs=
+
+	ParseBuildDefaultArgs "$@"
+	ParseExtArgs $UnHandledOpt
+
+	# Setup build environment
+	SetupBuildEnv AppendSynoXtraCflags
+
+	projectList=$(NormalizeBuildProjects $InputProjs)
+	INFO "" "projectList=\"$projectList\""
+	builtinProjs=$(CollectBuiltinProjs)
+
+	for ThisProj in $projectList; do
+		logFile="$LogDir/${ThisProj}.build"
+		[ -f "$logFile" ] && mv -f $logFile $logFile.old
+
+		(
+			INFO "Start to build ${ThisProj}."
+			Date0=`date +%s`
+			SetupBuildProjEnv $ThisProj
+			BuildProject $ThisProj
+			Date1=`date +%s`
+			ShowTimeCost $Date0 $Date1 "Build-->$ThisProj"
+			INFO "Build ${ThisProj} finished!"
+
+		) &> >(tee $logFile)
+
+	done
+
+	CheckTimeCostLog build $projectList
+	if ! CheckErrorLog build $projectList; then
+		return 1
+	fi
+	return 0
+}
+
+main $@

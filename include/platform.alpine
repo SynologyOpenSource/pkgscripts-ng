@@ -1,0 +1,31 @@
+ToolChainDir32="/usr/local/arm-unknown-linux-gnueabi"
+ToolChainPrefix32="${ToolChainDir32}/bin/arm-unknown-linux-gnueabi-"
+ToolChainBin32="${ToolChainDir32}/bin"
+ToolChainSysRoot32="${ToolChainDir32}/arm-unknown-linux-gnueabi/sysroot"
+ToolChainInclude32="${ToolChainSysRoot32}/usr/include"
+ToolChainLib32="${ToolChainSysRoot32}/lib"
+ARCH="arm"
+PLATFORM_FAMILY="SYNOPLAT_F_ARMV7"
+
+ConfigOpt32="--host=arm-unknown-linux-gnueabi --target=arm-unknown-linux-gnueabi --build=i686-pc-linux"
+
+# For sdk usbcam
+HOST32=armle-unknown-linux
+
+PLAT_FLAGS="-DSYNO_ANNAPURNA_ALPINE"
+CFLAGS32="-D$PLATFORM_FAMILY ${PLAT_FLAGS} -O2 -mfloat-abi=hard -march=armv7ve -mcpu=cortex-a15 -mtune=cortex-a15 -mfpu=neon-vfpv4 -mthumb -fno-diagnostics-show-caret -Wno-unused-local-typedefs"
+LDFLAGS32=""
+CC32=${ToolChainPrefix32}gcc
+CXX32=${ToolChainPrefix32}g++
+LD32=${ToolChainPrefix32}ld
+AR32=${ToolChainPrefix32}ar
+STRIP32=${ToolChainPrefix32}strip
+RANLIB32=${ToolChainPrefix32}ranlib
+NM32=${ToolChainPrefix32}nm
+READELF32=${ToolChainPrefix32}readelf
+
+KernelToolchain="gcc493_glibc220_hard"
+ToolchainTGZList="$KernelToolchain gcc472_glibc215_alpine"
+UBootToolchain="gcc472_glibc215_alpine"
+SynoKernelConfig="alpine"
+SynoGNUSources="alpine"

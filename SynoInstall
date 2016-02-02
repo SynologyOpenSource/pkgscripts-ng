@@ -1,0 +1,96 @@
+#!/bin/bash
+# Copyright (c) 2000-2016 Synology Inc. All rights reserved.
+
+. $(dirname `readlink -f "$0"`)/include/init
+
+LANG=""
+LC_ALL=""
+
+Usage() {
+	cat << EOF
+
+Usage
+	`basename $0` [OPTIONS] project_name+
+
+Synopsis
+	Install projects.
+
+Options
+	-p, --platform {platform}
+		Specify target platform.
+	-d, --with-debug
+		Install binaries with debug symbols.
+	-h, --help
+		This help message.
+EOF
+}
+
+Source include/install
+CheckPermission
+
+ARGS=`getopt -u -l $DefaultLongArgs,enable-apt,single $DefaultArgs $@`
+
+if [ $? -ne 0 ]; then
+	echo "You gave me option(s) that I do not know."
+	Usage
+	exit 1
+fi
+set -- $ARGS
+
+
+ParsePkgInstallArgs() {
+while [ -n "$1" ]; do
+	case "$1" in
+	"--enable-apt")
+		ENABLE_APT="yes"
+		;;
+	"--single")
+		# for backward compatibility
+		;;
+	*)
+		Error "Unhandled option '$1'"
+		Usage
+		exit 1
+		;;
+	esac
+	shift
+done
+}
+
+main() {
+	local projectList=
+	local logFile=
+	local installFailed=N
+
+	ParseDefaultInstallArgs $@
+	ParsePkgInstallArgs $UnHandledOpt
+
+	SetupInstallEnv "$IsDebugBuild"
+
+	projectList=$(UnifyInstallProjects $InputProjs)
+	INFO "projectList=\"$projectList\""
+
+	for ThisProj in $projectList; do
+		logFile="$LogDir/$ThisProj.install"
+		[ -f "$logFile" ] && mv -f $logFile ${logFile}.old
+
+	(
+		INFO "Start to install ${ThisProj}."
+		SetupProjInstallEnv $ThisProj
+
+		InstallProject $ThisProj && CreateTarball $ThisProj
+
+		INFO "Install $ThisProj finished!"
+
+	) &> >(tee $logFile)
+	done
+
+	if ! CheckErrorLog install $projectList; then
+		return 1;
+	fi
+
+	INFO "Finished SynoInstall script."
+	return 0
+}
+
+main $@
