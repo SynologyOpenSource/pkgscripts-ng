@@ -143,7 +143,7 @@ CreateTarball() {
 	if [ ! -z "$haveFile" ]; then
 		echo ""
 		echo "Create ${proj}.txz ..."
-		XZ_OPT=-3 tar cJpvf "$TarBallDir/${proj}.txz" *
+		( cd "$TmpInstDir"; XZ_OPT=-3 tar cJpvf "$TarBallDir/${proj}.txz" * )
 		echo "[Done]"
 	else
 		INFO "WARNING" "$TmpInstDir is empty!"
