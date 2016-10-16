@@ -143,19 +143,16 @@ def dumpProjectDepends(project, dict):
 
 
 def _replaceVariable(dictVars, dictDepends):
-    for var in dictVars:
-        for proj in dictDepends:
-            oldList = dictDepends[proj]
-            if var in oldList:    # if var is in dependency list, replace it
-                strNew = string.join(oldList)
-                strNew = strNew.replace(var, string.join(dictVars[var]))
-                dictDepends[proj] = strNew.split()
+    for variable in dictVars:
+        project = variable[0]
 
-            # if the variable is a project name, replace the project name
-            if var == proj:
-                newProj = string.join(dictVars[var])
-                newVal = dictDepends.pop(proj)
-                dictDepends[newProj] = newVal
+        # change key
+        if variable in dictDepends:
+            dictDepends[project] = dictDepends.pop(variable)
+
+        # change value
+        for proj in dictDepends:
+            dictDepends[proj] = [_.replace(variable, project) for _ in dictDepends[proj]]
 
 
 # replace project.depends Variable section in project dependency section
