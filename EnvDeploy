@@ -93,14 +93,16 @@ SetupEnvironment() {
 				fi
 			done
 		else
-			for suffix in tgz txz; do
+			for suffix in txz tgz; do
 				check_tarball=${tarball_name}.${suffix}
 				wget_target=http://$DownloadServer/toolkit/$arch/$sub_dir/${check_tarball}
+				echo "Test link alive: $wget_target"
 				if wget -S --spider $wget_target 2>&1 | grep -q 'HTTP/1.1 200 OK'; then
 					tarball=${check_tarball}
 					break
 				fi
 			done
+			echo "Download link: $wget_target"
 			wget -O $tarball $wget_target
 			ret=$?
 			if [ $ret -ne 0 ] && wget -O notification.txt http://$DownloadServer/toolkit/notification.txt; then
