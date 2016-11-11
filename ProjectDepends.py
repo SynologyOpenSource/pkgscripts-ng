@@ -1,4 +1,4 @@
-#!/usr/bin/python2
+#!/usr/bin/python3
 
 import sys
 import string
@@ -6,21 +6,18 @@ import os
 import glob
 import argparse
 import re
-from sets import Set
 
-sys.path.append(os.path.dirname(os.path.abspath(sys.argv[0])) + '/include')
-import pythonutils
-sys.path.append(os.path.dirname(os.path.abspath(sys.argv[0])) + '/include/python')
+ScriptDir = os.path.dirname(os.path.abspath(sys.argv[0]))
+sys.path.append(ScriptDir + '/include')
+sys.path.append(ScriptDir + '/include/python')
+import BuildEnv
+from config_parser import DependsParser, ProjectDependsParser
 
-# XXX: unified the variable with pythonutils.py
 # config file, to get basic project parameters
-config_path = "include/project.depends"
 section_depends = "project dependency"
-section_depends64 = "64bit project dependency"
 section_variables = "variables"
+config_path = ScriptDir + "/include/project.depends"
 
-# for kernel project replacement
-kernel_variable = "${Kernel}"
 libc_project = "uclibc0929"
 
 # Target sections in SynoBuildConf for packages
@@ -47,14 +44,14 @@ class DependencyError(Exception):
 
 class DepGraph:
     # all these attributes are not necessary, just for prototype reference
-    def __init__(self, dictIn, level, direct, blUseSection64):
+    def __init__(self, dictIn, level, direct):
         self.dict = dictIn
         self.direct = direct
         self.stack = []
         self.listOut = []
         self.level = level
+        self.visited = {}
         self.graph = {}
-        self.useSection64 = blUseSection64
 
     def traveseList(self, listProjs, t_level):
         if self.level != 0 and t_level >= self.level:
@@ -63,13 +60,19 @@ class DepGraph:
         for proj in listProjs:
             if proj in self.stack:
                 raise DependencyError(self.stack, proj)
-            if proj in self.listOut:
+            if proj in self.visited and t_level >= self.visited[proj]:
                 continue
             self.stack.append(proj)
+
+            self.visited[proj] = t_level
+
             depProj = self.getDepProjList(proj)
             if len(depProj) > 0:
                 self.traveseList(depProj, t_level+1)
-            self.listOut.append(proj)
+
+            if proj not in self.listOut:
+                self.listOut.append(proj)
+
             self.stack.pop()
 
     def traverseDepends(self, listProjs):
@@ -88,16 +91,7 @@ class DepGraph:
         return reverseList
 
     def getReverseDep(self, proj):
-        Dict = {}
-        if self.useSection64:
-            reverseDep = []
-            Dict = self.dict[section_depends64]
-            reverseDep = self.getReverseList(proj, Dict)
-            if reverseDep:
-                return reverseDep
-
-        Dict = self.dict[section_depends]
-        return self.getReverseList(proj, Dict)
+        return self.getReverseList(proj, self.dict)
 
     def getTraverseList(self, proj, Dict):
         if proj in Dict:
@@ -105,15 +99,7 @@ class DepGraph:
         return []
 
     def getTraverseDep(self, proj):
-        Dict = {}
-        if self.useSection64:
-            Dict = self.dict[section_depends64]
-            traverseDep = self.getTraverseList(proj, Dict)
-            if traverseDep:
-                return traverseDep
-
-        Dict = self.dict[section_depends]
-        return self.getTraverseList(proj, Dict)
+        return self.getTraverseList(proj, self.dict)
 
     def getDepProjList(self, proj):
         # -r : Expand project dependency list reversely.
@@ -142,39 +128,17 @@ def dumpProjectDepends(project, dict):
         print(project + ": " + string.join(dict[project]))
 
 
-def _replaceVariable(dictVars, dictDepends):
-    for variable in dictVars:
-        project = variable[0]
-
+# replace project.depends Variable section in project dependency section
+# i.e. ${KernelPacks} to synobios
+def replaceVariableSection(config, dictDepends):
+    for var, value in config.variables.items():
         # change key
-        if variable in dictDepends:
-            dictDepends[project] = dictDepends.pop(variable)
+        if var in dictDepends:
+            dictDepends[var] = dictDepends.pop(var)
 
         # change value
         for proj in dictDepends:
-            dictDepends[proj] = [_.replace(variable, project) for _ in dictDepends[proj]]
-
-
-# replace project.depends Variable section in project dependency section
-# i.e. ${KernelPacks} to synobios
-def replaceVariableSection(dict, bl64bit):
-    dictVars = dict[section_variables]
-    dictDepends = dict[section_depends]
-    _replaceVariable(dictVars, dictDepends)
-
-    if bl64bit:
-        dictDepends = dict[section_depends64]
-        _replaceVariable(dictVars, dictDepends)
-
-
-def getAllDependencyKey(dict):
-    allDepProjkeys = dict[section_depends].keys()
-
-    if dict[section_depends64].keys():
-        for proj in dict[section_depends64].keys():
-            if proj not in allDepProjkeys:
-                allDepProjkeys.append(proj)
-    return allDepProjkeys
+            dictDepends[proj] = [_.replace(var, value[0]) for _ in dictDepends[proj]]
 
 
 def isKernelHeaderProj(newProj):
@@ -185,9 +149,10 @@ def isKernelHeaderProj(newProj):
     return False
 
 
-def normalizeProjects(dict, projects, kernels):
+def normalizeProjects(projects, config, kernels):
     out_projects = set()
     blAddKernelHeader = None
+    allKernels = config.all_kernels
 
     for proj in projects:
         newProj = proj.rstrip("/")
@@ -195,7 +160,7 @@ def normalizeProjects(dict, projects, kernels):
         if isKernelHeaderProj(newProj):
             newProj = ""
             blAddKernelHeader = True
-        if isKernelProject(dict, newProj):
+        if newProj in allKernels:
             out_projects.update(kernels)
             continue
         elif newProj == libc_project:    # always skip libc
@@ -207,7 +172,7 @@ def normalizeProjects(dict, projects, kernels):
 
 
 def findPlatformDependsProj(platformDependsSection, platforms):
-    listReplaceProj = Set()
+    listReplaceProj = set()
     projects = []
 
     # if there is no platform specified, check for all platforms
@@ -231,78 +196,23 @@ def findPlatformDependsProj(platformDependsSection, platforms):
     return listReplaceProj
 
 
-def replaceVariableInDictSection(dictInput, variable, projsToReplace):
-    for key in dictInput:
-        listDepProj = dictInput[key]
+def replaceVariableInDictSection(dictDepends, variable, projsToReplace):
+    for proj in dictDepends:
+        listDepProj = dictDepends[proj]
         if variable in listDepProj:
             for proj in projsToReplace:
                 listDepProj.insert(listDepProj.index(variable), proj)
             listDepProj.remove(variable)
 
 
-# Replace ${XXXX} in dependency list by [${XXXX}] section
-def replacePlatformDependsVariable(dictInput, platforms, bl64bit):
-    def replaceVariableWithSection(variable, section_name):
-        try:
-            dictSection = dictInput[section_name]
-        except KeyError:
-            print("No such section:" + variable)
-
-        listPlatformDependsProj = findPlatformDependsProj(dictSection,
-                                                          platforms)
-
-        replaceVariableInDictSection(dictInput[section_depends],
-                                     variable,
-                                     listPlatformDependsProj)
-        if bl64bit:
-            replaceVariableInDictSection(dictInput[section_depends64],
-                                         variable,
-                                         listPlatformDependsProj)
-
-    if dynamic_variable not in dictInput:
-        # for old project depends compatibility
-        replaceVariableWithSection("${KernelProjs}", pythonutils.SECTION_KERNEL_OLD)
-        return
-    for variable in dictInput[dynamic_variable]['list']:
-        replaceVariableWithSection(variable, variable)
-
-
-def isKernelProject(dictInput, strProj):
-    bRet = False
-    listKernels = pythonutils.getKernelDict(dictInput).values()
-    listKernel = []
-
-    for list in listKernels:
-        listKernel += list
-
-    if strProj in listKernel:
-        bRet = True
-
-    return bRet
-
-
 def is64BitPlatform(platform):
-    listPlatform64 = ['x64', 'bromolow', 'cedarview', 'avoton', 'braswell']
+    listPlatform64 = ['x64', 'bromolow', 'cedarview', 'avoton',
+                      'bromolowESM', 'baytrail', 'dockerx64']
     if platform in listPlatform64:
         return True
     else:
         return False
 
-
-def checkPlatform(platforms):
-    bl64bit = True
-    bl32bit = True
-    for platform in platforms:
-        blPlatformArch = is64BitPlatform(platform)
-        bl64bit &= blPlatformArch
-        bl32bit &= not blPlatformArch
-
-    if bl32bit is True:
-        return "32"
-    if bl64bit is True:
-        return "64"
-
-    return "mix"
 
 def ParseArgs():
     parser = argparse.ArgumentParser()
@@ -315,40 +225,29 @@ def ParseArgs():
     return parser.parse_args()
 
 
-def loadConfigFiles(platforms):
-    dictConfigs = {}
+def loadConfigFiles(config):
+    dictDepends = config.project_depends
 
-    strCurrentDir = os.path.dirname(os.path.abspath(sys.argv[0]))
-    strOutConfigPath = strCurrentDir + "/" + config_path
-    dictConfigs = pythonutils.readKeyValueConfig(strOutConfigPath)
-
-    confList = glob.glob(strCurrentDir + "/../source/*/SynoBuildConf/depends*")
+    confList = glob.glob(ScriptDir + "/../source/*/SynoBuildConf/depends*")
     for confPath in confList:
         project = confPath.split('/')[-3]
         filename = confPath.split('/')[-1]
+        if BuildEnv.isVirtualProject(filename):
+            project = BuildEnv.deVirtual(project) + BuildEnv.VIRTUAL_PROJECT_SEPARATOR + BuildEnv.getVirtualName(filename)
 
         if os.path.isfile(confPath):
-            confSetting = pythonutils.readDependsConf(confPath, platforms)
-            for sec, project_type in [(section_depends, 'build'), (section_depends64, 'build64')]:
-                # we don't have section_depends64 in old file
-                if sec not in dictConfigs and sec == section_depends64:
-                    continue
-                if project not in dictConfigs[sec]:
-                    dictConfigs[sec][project] = []
-                dictConfigs[sec][project] += confSetting[project_type]['curr']
-                dictConfigs[sec][project] += confSetting[project_type]['base']
+            depends = DependsParser(confPath)
+            if project not in dictDepends:
+                dictDepends[project] = []
+            dictDepends[project] = list(set(dictDepends[project] + depends.build_dep))
+            dictDepends[project] = list(set(dictDepends[project] + depends.build_tag))
 
-                for rewriteProj in confSetting[project_type]['bug']:
-                    # XXX: what if the project hasn't loaded into dictConfigs?
-                    if rewriteProj in dictConfigs[sec]:
-                        dictConfigs[sec][rewriteProj] = confSetting[project_type]['bug'][rewriteProj]
-
-    return dictConfigs
+    return dictDepends
 
 # main procedure
 if __name__ == "__main__":
     # get command line arguments
-    dictConfigs = {}
+    dictDepends = {}
     listProjs = []
     listOut = []
     blAddKernelHeader = False
@@ -373,41 +272,25 @@ if __name__ == "__main__":
     if dictArgs.level == -1 and dictArgs.r_level == -1:
         level = 0
 
-    dictConfigs = loadConfigFiles(platforms)
+    config = ProjectDependsParser(config_path)
+    dictDepends = loadConfigFiles(config)
 
     listProjs = dictArgs.listProj
 
-    kernelSection = pythonutils.getKernelDict(dictConfigs)
-    kernels = findPlatformDependsProj(kernelSection, platforms)
-
-    platformArch = checkPlatform(platforms)
-    if platformArch == "64" and section_depends64 in dictConfigs:
-        bl64bit = True
-    else:
-        bl64bit = False
+    kernels = config.get_platform_kernels(platforms)
 
     if listProjs:
         dictDepGraph = {}
-        blAddKernelHeader, normalizedProjList = normalizeProjects(dictConfigs, listProjs, kernels)
-        replaceVariableSection(dictConfigs, bl64bit)
-        replacePlatformDependsVariable(dictConfigs, platforms, bl64bit)
-        depGraph = DepGraph(dictConfigs, level, direct, bl64bit)
+        blAddKernelHeader, normalizedProjList = normalizeProjects(listProjs, config, kernels)
+        replaceVariableSection(config, dictDepends)
+        depGraph = DepGraph(dictDepends, level, direct)
         listOut = depGraph.traverseDepends(normalizedProjList)
-
-        # mix means input has two different arch platform, we need to build
-        # another graph for different arch.
-        if platformArch == 'mix':
-            depGraphMix = DepGraph(dictConfigs, level, direct, not bl64bit)
-            listMix = depGraphMix.traverseDepends(normalizedProjList)
-            for proj in listMix:
-                if proj not in listOut:
-                    listOut.append(proj)
 
         # reorder need filter while args not contain 'x' and 'r'
         if dictArgs.level == -1 and dictArgs.r_level == -1:
             listReorder = []
             for proj in listOut:
-                if proj in listProjs:
+                if proj in normalizedProjList:
                     listReorder.append(proj)
             listOut = listReorder
 
@@ -417,7 +300,7 @@ if __name__ == "__main__":
                 listKernelHeader.append(kernel + '-virtual-headers')
             listOut = listKernelHeader + listOut
 
-        strOut = string.join(listOut, " ")
+        strOut = " ".join(listOut)
         if len(strOut) > 0:
             print(strOut)
     elif len(platforms) > 0:
@@ -429,7 +312,7 @@ if __name__ == "__main__":
             listKernelHeader = []
             for kernel in kernels:
                 listKernelHeader.append(kernel + '-virtual-headers')
-            print(string.join(listKernelHeader, " "))
+            print(" ".join(listKernelHeader))
         else:
             print(" ".join(kernels))
     else:  # len(listProjs) <= 0

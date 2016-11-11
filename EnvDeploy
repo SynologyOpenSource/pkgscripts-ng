@@ -1,342 +1,332 @@
-#!/bin/bash
+#!/usr/bin/env python3
 # Copyright (c) 2000-2016 Synology Inc. All rights reserved.
 
-LANG=""
-LC_ALL=""
-. "$(dirname "$(readlink -f "$0")")/include/init"
+import argparse
+import urllib.request
+import sys
+import os
+import subprocess
+import glob
+import shutil
 
-Usage() {
-	cat << EOF
+sys.path.append(os.path.realpath(os.path.dirname(__file__)) + "/include/python")
+import BuildEnv
+from parallel import doPlatformParallel
+from cache import cache
+from chroot import Chroot
+from tee import Tee
+from toolkit import TarballManager
 
-Usage
-	`basename $0` [OPTIONS] -v version
+log_file = os.path.join(BuildEnv.SynoBase, 'envdeploy.log')
+sys.stdout = Tee(sys.stdout, log_file)
+sys.stderr = Tee(sys.stderr, log_file, move=False)
 
-Synopsis
-	Deploy build environment for platform(s) of specified version.
-
-Options
-	-v, --version {version}
-		Specify target DSM version of enviroment.
-	-p, --platform {platform}
-		Specify target platforms. Default deploy all available platforms for specified version.
-	-i, --info platform|project
-		Display list of platforms or pre-built projects. Use it with -v to specify version.
-	-l, --list
-		List available platforms, the same as "--info platform". Use it with -v to specify version.
-	-s, --suffix {suffix}
-		Specify suffix for destination folder. For example, $SynoBase/build_env-{suffix}
-		Default destination folder is $SynoBase/build_env.
-	-t, --tarball {dir}
-		Extract local {dir}/tarballs rather than download them.
-		Names of tarballs should be something like ds.x64-4.2.env.txz or ds.x64-4.2.dev.txz
-	-d, --demo
-		Default destination folder is $SynoBase/build_env-demo if no suffix is given.
-	--preview
-		Download preview environment of version specified by -v option.
-	--us3
-		Download US3 environment of version specified by -v option.
-	-c, --clean
-		Clean first if destination folder already exists.
-	-y, --yes
-		Assume "yes" on all questions.
-	-h, --help
-		This help message.
-
-EOF
-}
-
-PromptConfirm() {
-	[ $# -ne 1 ] && CheckErrorOut 1 "Wrong number of parameters to $FUNCNAME()."
-	local confirm= message="$1"
-
-	echo -e "\n$message"
-	read -p "Continue? (y/n)[n]: " confirm
-	if [ "$confirm" != "y" -a "$confirm" != "Y" ]; then
-		echo -e "Canceled.\n"
-		exit 0
-	else
-		echo -e "Continue ...\n"
-	fi
-}
-
-SetupEnvironment() {
-	[ $# -ne 2 -a $# -ne 3 ] && CheckErrorOut 1 "Wrong number of parameters to $FUNCNAME()."
-	local arch="$1" version="$2" build_version="$3" cur_dir="`pwd`" tarball= ret= sub_dir=
-	local arch_dir="ds.$arch-$version"
-
-	# Clear
-	if grep -q "\s$EnvDir/$arch_dir/proc" /proc/mounts; then
-		umount $arch_dir/proc
-		CheckErrorOut $? "Fail to unmount $EnvDir/$arch_dir/proc"
-	fi
-	[ "$DoClean" = "Yes" ] && rm -rf $arch_dir
-	mkdir $arch_dir
-	cd $arch_dir
-
-	# Download & extract
-	[ "$SYNO_DEMO_MODE" = "Yes" ] && version="$version-demo"
-	if [ "$SYNO_PREVIEW" = "Yes" ]; then
-		sub_dir="$version-preview"
-	elif [ "$SYNO_US3" = "Yes" ]; then
-		sub_dir="$version-us3"
-	elif [ -n "$build_version" ]; then
-		sub_dir="$build_version"
-	fi
-
-	for tarball_name in ds.$arch-$version.{env,dev}; do
-		tarball=
-		if [ -n "$SrcTarballDir" ]; then
-			for suffix in tgz txz; do
-				if [ -f $SrcTarballDir/${tarball_name}.${suffix} ]; then
-					tarball=$SrcTarballDir/${tarball_name}.${suffix}
-					break
-				fi
-			done
-		else
-			for suffix in txz tgz; do
-				check_tarball=${tarball_name}.${suffix}
-				wget_target=http://$DownloadServer/toolkit/$arch/$sub_dir/${check_tarball}
-				echo "Test link alive: $wget_target"
-				if wget -S --spider $wget_target 2>&1 | grep -q 'HTTP/1.1 200 OK'; then
-					tarball=${check_tarball}
-					break
-				fi
-			done
-			echo "Download link: $wget_target"
-			wget -O $tarball $wget_target
-			ret=$?
-			if [ $ret -ne 0 ] && wget -O notification.txt http://$DownloadServer/toolkit/notification.txt; then
-				cat notification.txt
-				rm -f notification.txt
-				exit 2
-			fi
-			CheckErrorOut $ret "Fail to download $tarball!!"
-		fi
-
-		tar_opt=
-		echo "Extract $tarball ..."
-		if file -b $tarball | grep -q "XZ compressed"; then
-			which pixz &>/dev/null && tar_opt=-Ipixz
-		fi
-		tar $tar_opt -xhf $tarball
-		CheckErrorOut $? "Fail to extract $tarball!!"
-		[ -z "$SrcTarballDir" ] && rm -f $tarball
-	done
-
-	# TODO Setup $EnvDir/$arch_dir/etc/apt/sources.list and get metapackage
-	cd $cur_dir
-}
-
-ResolveVersion() {
-	[ $# -ne 1 ] && CheckErrorOut 1 "Wrong number of parameters to $FUNCNAME()."
-
-	if [[ $1 =~ ^[0-9]+\.[0-9]+$ ]]; then
-		Version="$1"
-		BuildVersion=
-	elif [[ $1 =~ ^[0-9]+\.[0-9]+-[0-9]+$ ]]; then
-		Version="`echo $1 | cut -d'-' -f1`"
-		BuildVersion="`echo $1 | cut -d'-' -f2`"
-	else
-		return 1
-	fi
-	return 0
-}
-
-GetAvailableVersions() {
-	local prefix="AvailablePlatform_" line= index= versions=
-	while read line; do
-		[[ $line =~ ^$prefix[0-9]+_[0-9]+= ]] || continue
-		index="`echo $line | cut -d'=' -f1`"
-		versions="$versions `echo $index | awk -F'_' '{print $2"."$3}'`"
-	done < <(set | grep $prefix)
-	echo "$versions"
-}
-
-ListAvailablePlatforms() {
-	local version="$1" prefix= index= item=
-	if [ "$SYNO_DEMO_MODE" = "Yes" ]; then
-		prefix="AvailableDemoPlatform_"
-		echo -e "\n======== Available Platforms (Demo) ========"
-	else
-		prefix="AvailablePlatform_"
-		echo -e "\n======== Available Platforms ========"
-	fi
-	if [ -n "$version" ]; then
-		index="${prefix}`echo $version | sed 's/\./_/g'`"
-		echo "$version: ${!index}"
-	else
-		for item in `GetAvailableVersions`; do
-			index="${prefix}`echo $item | sed 's/\./_/g'`"
-			echo "$item: ${!index}"
-		done
-	fi
-	echo ""
-}
-
-ListBuiltinProjects() {
-	local version= config=
-	if [ -f "$ScriptsDir/include/gitutils" ]; then
-		config="include/config"
-		for version in ${1:-`GetAvailableVersions`}; do
-			echo -e "\n======== $version Built-in Projects ========"
-			( cd $ScriptsDir; . include/gitutils; GitCheckoutFiles $version $config > /dev/null; . $config; echo $PreBuildProjects; )
-		done
-	else
-		for config in `ls $ScriptsDir/include/projects-${1:-*} | sort`; do
-			version="`echo $config | cut -d'-' -f2`"
-			echo -e "\n======== $version Built-in Projects ========"
-			( . $config; echo $PreBuildProjects; )
-		done
-	fi
-	echo ""
-}
-
-ListRequestedInfo() {
-	[ $# -lt 1 ] && CheckErrorOut 1 "Wrong number of parameters to $FUNCNAME()."
-	case "$1" in
-		"platform")
-			ListAvailablePlatforms $2
-			;;
-		"project")
-			ListBuiltinProjects $2
-			;;
-		*)
-			echo "Unknown target \"$1\" to list!"
-			exit 1
-			;;
-	esac
-}
+VersionMap = 'version_map'
+DownloadDir = os.path.join(BuildEnv.SynoBase, 'toolkit_tarballs')
+ToolkitServer = 'https://sourceforge.net/projects/dsgpl/files/toolkit'
+Product = "DSM"
 
 
-Args=`getopt -u -l 'version:,platform:,tarball:,suffix:,info:,list,demo,preview,us3,clean,yes,help' v:p:t:s:i:ldcyh $@`
-if [ $? -ne 0 ]; then
-	echo "You gave me option(s) that I do not know."
-	Usage
-	exit 1
-fi
+@cache
+def split_version(version):
+    if '-' in version:
+        return version.split('-')
+    else:
+        return version, None
 
-DoClean="No"
-DontAsk="No"
 
-Source include/check
-Source include/config
-Source include/platforms
-Source include/toolkit.config
+class EnvDeployError(RuntimeError):
+    pass
 
-# Parse options
-while [ -n "$1" ]; do
-case "$1" in
-	"-p" | "--platform")
-		Platforms="$2"
-		shift
-		;;
-	"-v" | "--version")
-		ResolveVersion $2
-		CheckErrorOut $? "$2 is not a valid version/build-number."
-		RawVersion="$2"
-		shift
-		;;
-	"-i" | "--info")
-		ListOnly="Yes"
-		ListTarget="$2"
-		shift
-		;;
-	"-l" | "--list")
-		ListOnly="Yes"
-		ListTarget="platform"
-		;;
-	"-s" | "--suffix")
-		Suffix="$2"
-		shift
-		;;
-	"-t" | "--tarball")
-		[ "${2:0:1}" = "/" ] && SrcTarballDir="$2" || SrcTarballDir="$CurDir/$2"
-		shift
-		;;
-	"-d" | "--demo")
-		SYNO_DEMO_MODE="Yes"
-		;;
-	"--preview")
-		SYNO_PREVIEW="Yes"
-		;;
-	"--us3")
-		SYNO_US3="Yes"
-		;;
-	"-y" | "--yes")
-		DontAsk="Yes"
-		;;
-	"-c" | "--clean")
-		DoClean="Yes"
-		;;
-	"-h" | "--help")
-		Usage
-		exit 0
-		;;
-	"--")
-		shift
-		break
-		;;
-	*)
-		echo "Unhandled option '$1'"
-		echo "Something wrong in $0. Please contact maintainer."
-		exit 1
-		;;
-esac
-shift
-done
-if [ "$ListOnly" = "Yes" ]; then
-	ListRequestedInfo $ListTarget $Version
-	exit 0
-fi
 
-ProjectList="$@"  # TODO support to update/upgrade project individually
+class TarballNotFoundError(EnvDeployError):
+    pass
 
-if [ -z "$Version" ]; then
-	read -p "What base version do you want? " RawVersion
-	ResolveVersion $RawVersion
-	CheckErrorOut $? "$RawVersion is not a valid DSM version."
-fi
-if [ "$SYNO_DEMO_MODE" = "Yes" ]; then
-	PlatformIndex="AvailableDemoPlatform_`echo $Version | sed 's/\./_/g'`"
-else
-	PlatformIndex="AvailablePlatform_`echo $Version | sed 's/\./_/g'`"
-fi
-if [ -z "$Platforms" ]; then
-	Platforms="${!PlatformIndex}"
-else
-	for Arch in $Platforms; do
-		CheckInList $Arch ${!PlatformIndex}
-		CheckErrorOut $? "Environment for $Arch ($Version) is not available."
-	done
-fi
 
-# Destination folder
-if [ -n "$Suffix" ]; then
-	EnvDir="$SynoBase/build_env-$Suffix"
-elif [ "$SYNO_DEMO_MODE" = "Yes" ]; then
-	EnvDir="$SynoBase/build_env-demo"
-else
-	EnvDir="$SynoBase/build_env"
-fi
+class PlatformNotAvailableError(EnvDeployError):
+    pass
 
-# Confirm
-echo ""
-echo "Desired platform: $Platforms"
-echo "Desired version: $Version ($RawVersion)"
-echo "Destination folder: $EnvDir"
-echo "Clean if target exists: $DoClean"
-if [ "$DontAsk" != "Yes" ]; then
-	PromptConfirm "Continue if above settings are OK."
-fi
-echo ""
 
-# Deploy
-mkdir -p $EnvDir
-cd $EnvDir
-for Arch in $Platforms; do
-	SetupEnvironment $Arch $Version $BuildVersion
-	ln -sf `basename ds.$Arch-$Version/usr/bin/python2.[0-9]` ds.$Arch-$Version/usr/bin/python2
-	ln -sf pkgscripts-ng ds.$Arch-$Version/pkgscripts
-done
-cd $CurDir
-exit 0
+class DownloadToolkitError(EnvDeployError):
+    pass
+
+
+class ToolkitDownloader:
+    def __init__(self, version, platforms, tarball_manager, quiet):
+        self._download_list = []
+        self.version, self.build_num = split_version(version)
+        self.platforms = platforms
+        self.tarball_manager = tarball_manager
+        self.quiet = quiet
+
+        self.append_base_tarball()
+        self.append_env_tarball()
+        self.append_dev_tarball()
+
+        if not os.path.isdir(DownloadDir):
+            os.makedirs(DownloadDir)
+
+    def _join_download_url(self, *patterns):
+        url = ToolkitServer
+        for pattern in list(patterns):
+            if not pattern:
+                continue
+            url += '/%s' % pattern
+        return url
+
+    def _download(self, url):
+        print("Download... " + url)
+        if self.quiet:
+            reporthook = None
+        else:
+            reporthook = self.dl_progress
+
+        try:
+            dest = os.path.join(DownloadDir, url.split("/")[-1])
+            urllib.request.urlretrieve(url, dest, reporthook=reporthook)
+            print("Download destination: " + dest)
+        except urllib.error.HTTPError:
+            raise DownloadToolkitError("Failed to download toolkit: " + url)
+
+    def dl_progress(self, count, dl_size, total_size):
+        percent = int(count * dl_size * 50 / total_size)
+        sys.stdout.write("[%-50s] %d%%" % ('=' * (percent-1) + ">", 2 * percent))
+        sys.stdout.flush()
+        sys.stdout.write("\b" * 102)
+
+    def _test_url_available(self, url):
+        try:
+            return int(urllib.request.urlopen(url).getcode()) == 200
+        except urllib.error.HTTPError:
+            return False
+
+    def append_base_tarball(self):
+        self._download_list.append(self._join_download_url(Product + self.version, self.tarball_manager.base_tarball_name))
+
+    def append_env_tarball(self):
+        self.append_platform_tarball_list(self.tarball_manager.get_env_tarball_name)
+
+    def append_dev_tarball(self):
+        self.append_platform_tarball_list(self.tarball_manager.get_dev_tarball_name)
+
+    def append_platform_tarball_list(self, get_tarball_name):
+        for platform in self.platforms:
+            self._download_list.append(self._join_download_url(Product + self.version, get_tarball_name(platform)))
+
+    def download_toolkit(self):
+        for url in self._download_list:
+            if self._test_url_available(url):
+                self._download(url)
+            else:
+                raise DownloadToolkitError("URL {} not exist. Please ask synology support for assistance.".format(url))
+
+
+class ToolkitDeployer:
+    def __init__(self, args, platforms, tarball_manager):
+        self.clear = args.clear
+        self.version, self.build_num = split_version(args.version)
+        self.platforms = platforms
+        self.suffix = args.suffix
+        self.tarball_manager = tarball_manager
+
+    @property
+    def has_pixz(self):
+        try:
+            with open(os.devnull, 'rb') as null:
+                subprocess.check_call(['which', 'pixz'], stdout=null, stderr=null)
+        except subprocess.CalledProcessError:
+            return False
+        return True
+
+    def __extract__(self, tarball, dest_dir):
+        cmd = ['tar']
+        if self.has_pixz:
+            cmd.append('-Ipixz')
+        cmd += ['-xhf', tarball, '-C', dest_dir]
+        print(" ".join(cmd))
+        subprocess.check_call(cmd)
+
+    def deploy_base_env(self, platform):
+        base_tarball = self.tarball_manager.base_tarball_path
+        self.__extract__(base_tarball, BuildEnv.getChrootSynoBase(platform, self.version, self.suffix))
+
+    def deploy_env(self, platform):
+        self.__extract__(self.tarball_manager.get_env_tarball_path(platform),
+                         BuildEnv.getChrootSynoBase(platform, self.version, self.suffix))
+
+    # clear and mkdir chroot
+    def setup_chroot(self, platform):
+        chroot = BuildEnv.getChrootSynoBase(platform, self.version, self.suffix)
+        if not os.path.isdir(chroot):
+            os.makedirs(chroot)
+            return
+
+        if not self.clear:
+            return
+
+        print("Clear %s..." % chroot)
+        try:
+            with open(os.devnull, 'wb') as null:
+                subprocess.check_call(['umount', os.path.join(chroot, 'proc')], stderr=null)
+        except subprocess.CalledProcessError:
+            pass
+
+        for f in os.listdir(chroot):
+            if 'ccaches' in f:
+                continue
+            file_path = os.path.join(chroot, f)
+            subprocess.check_call(['rm', '-rf', file_path])
+
+    def __install_debs__(self, chroot):
+        with Chroot(chroot) as chroot:
+            deb_list = glob.glob('*.deb')
+            if not deb_list:
+                return
+
+            for deb in deb_list:
+                subprocess.check_call(['dpkg', '-i', chroot.get_inside_path(deb)])
+                os.remove(deb)
+
+    def deploy_dev(self, platform):
+        chroot = BuildEnv.getChrootSynoBase(platform, self.version, self.suffix)
+        self.__extract__(self.tarball_manager.get_dev_tarball_path(platform), chroot)
+        self.__install_debs__(chroot)
+
+    def adjust_chroot(self, platform):
+        def mkdir_source(chroot):
+            source_dir = os.path.join(chroot, 'source')
+            if not os.path.isdir(source_dir):
+                os.makedirs(source_dir)
+
+        def link_python(chroot):
+            python2_x = glob.glob(os.path.join(chroot, 'usr', 'bin', 'python2.[0-9]'))[0]
+            python = os.path.join(chroot, 'usr', 'bin', 'python')
+            if os.path.exists(python):
+                os.remove(python)
+            os.symlink(os.path.basename(python2_x), python)
+
+        def copy_user_env_config(chroot):
+            configs = ['/etc/hosts', '/root/.gitconfig', '/root/.ssh', '/etc/resolv.conf']
+
+            for config in configs:
+                dest = chroot + config
+                if os.path.isdir(config):
+                    if os.path.isdir(dest):
+                        shutil.rmtree(dest)
+                    shutil.copytree(config, dest)
+                elif os.path.isfile(config):
+                    shutil.copy(config, dest)
+
+        chroot = BuildEnv.getChrootSynoBase(platform, self.version, self.suffix)
+        mkdir_source(chroot)
+        link_python(chroot)
+        copy_user_env_config(chroot)
+        if not os.path.islink(os.path.join(chroot, 'pkgscripts')):
+            os.symlink('pkgscripts-ng', os.path.join(chroot, 'pkgscripts'))
+
+    def deploy(self):
+        doPlatformParallel(self.setup_chroot, self.platforms)
+        doPlatformParallel(self.deploy_base_env, self.platforms)
+        doPlatformParallel(self.deploy_env, self.platforms)
+        doPlatformParallel(self.deploy_dev, self.platforms)
+        doPlatformParallel(self.adjust_chroot, self.platforms)
+
+
+def check_tarball_exists(build_num, platforms, tarball_manager):
+    files = []
+    files.append(tarball_manager.base_tarball_path)
+
+    for platform in platforms:
+        files.append(tarball_manager.get_dev_tarball_path(platform))
+        files.append(tarball_manager.get_env_tarball_path(platform))
+
+    for f in files:
+        if not os.path.isfile(f):
+            raise TarballNotFoundError("Needed file not found! " + f)
+
+
+def get_all_platforms(dsm_ver, build_num):
+    pattern = 'AvailablePlatform_%s_%s' % (dsm_ver.split('.')[0], dsm_ver.split('.')[1])
+
+    # -v 6.0-8405
+    if build_num:
+        try:
+            cmd = ['git', '-C', os.path.dirname(__file__), 'show', 'origin/%sPKGDEV:include/toolkit.config' % build_num]
+            config = subprocess.check_output(cmd).decode().split('\n')
+        except subprocess.CalledProcessError:
+            raise PlatformNotAvailableError("Please check `%sPKGDEV' branch exist!" % build_num)
+
+        for line in config:
+            if pattern in line:
+                platforms = line.split('=')[1].strip('"').split()
+    # -v 6.0
+    else:
+        platforms = BuildEnv.getIncludeVariable('toolkit.config', pattern).split()
+
+    return platforms
+
+
+def get_platforms(dsm_ver, build_num, platforms):
+    all_platforms = get_all_platforms(dsm_ver, build_num)
+
+    if not platforms:
+        return all_platforms
+
+    redundant_platforms = set(platforms) - set(all_platforms)
+    if redundant_platforms:
+        raise PlatformNotAvailableError("[%s] is not available platform." % " ".join(redundant_platforms))
+
+    return platforms
+
+
+def parse_args(argv):
+    argparser = argparse.ArgumentParser()
+    argparser.add_argument('-v', '--version', dest='version',
+                           help='Deploy toolkit version (6.0 or 6.0-9527), default is latest version')
+    argparser.add_argument('-c', '--clear', action='store_true', default=False,
+                           help='Clear chroot before deploy')
+    argparser.add_argument('-t', '--tarball', dest='local_tarball', default=None, help='Use local tarball dir')
+    argparser.add_argument('-s', '--suffix', help='Assign build_env suffix, ex build_env-demo')
+    argparser.add_argument('-q', '--quiet', action='store_true', help="Don't display download status bar")
+    argparser.add_argument('-l', '--list', action="store_true", default=False, help='List available platforms')
+    argparser.add_argument('-p', dest='platforms', default="", help='Deploy platforms')
+
+    args = argparser.parse_args(argv)
+    args.platforms = args.platforms.split()
+
+    if not args.version:
+        args.version = BuildEnv.getIncludeVariable('toolkit.config', 'LatestVersion')
+
+    return args
+
+
+def main(argv):
+    args = parse_args(argv)
+    dsm_ver, build_num = split_version(args.version)
+    platforms = get_platforms(dsm_ver, build_num, args.platforms)
+    tarball_root = DownloadDir
+
+    if args.list:
+        print("Available platforms: " + " ".join(platforms))
+        return
+
+    if args.local_tarball:
+        tarball_root = args.local_tarball
+
+    tarball_manager = TarballManager(dsm_ver, tarball_root)
+
+    if not args.local_tarball:
+        ToolkitDownloader(args.version, platforms, tarball_manager, args.quiet).download_toolkit()
+
+    check_tarball_exists(build_num, platforms, tarball_manager)
+    ToolkitDeployer(args, platforms, tarball_manager).deploy()
+    print("All task finished.")
+
+
+if __name__ == '__main__':
+    try:
+        main(sys.argv[1:])
+    except EnvDeployError as e:
+        print("\n\033[91m%s:\033[0m" % type(e).__name__)
+        print(str(e))
+        print("\n[ERROR] " + " ".join(sys.argv) + " failed!")

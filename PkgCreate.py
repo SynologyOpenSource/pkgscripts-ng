@@ -1,606 +1,730 @@
-#!/usr/bin/python2
-# Copyright (c) 2000-2016 Synology Inc. All rights reserved.
+#!/usr/bin/python3
+# Copyright (c) 2000-2014 Synology Inc. All rights reserved.
 
-
-import sys, os
-from getopt import *
-from time import localtime, strftime
-from shutil import rmtree
+import sys
+import os
+from subprocess import check_call, check_output, CalledProcessError, STDOUT, Popen
+import argparse
+import glob
+import shutil
+from time import localtime, strftime, gmtime, time
+from collections import defaultdict
 
 # Paths
-ScriptDir = os.path.dirname(os.path.abspath(sys.argv[0]))
+ScriptDir = os.path.dirname(os.path.abspath(__file__))
 BaseDir = os.path.dirname(ScriptDir)
-ScriptName = os.path.basename(sys.argv[0])
+ScriptName = os.path.basename(__file__)
 PkgScripts = '/pkgscripts-ng'
 
 sys.path.append(ScriptDir+'/include')
-import pythonutils
-from pythonutils import *
+sys.path.append(ScriptDir+'/include/python')
+import BuildEnv
+from chroot import Chroot
+from parallel import doPlatformParallel, doParallel
+from link_project import link_projects, link_scripts, LinkProjectError
+from tee import Tee
+import config_parser
+from project_visitor import UpdateHook, ProjectVisitor, UpdateFailedError, ConflictError
+from version_file import VersionFile
+
+log_file = os.path.join(BaseDir, 'pkgcreate.log')
+sys.stdout = Tee(sys.stdout, log_file)
+sys.stderr = Tee(sys.stderr, log_file, move=False)
+
+MinSDKVersion = "6.0"
+BasicProjects = set()
 
 
-def displayUsage(code):
-    message = '\nUsage\n\t'+ScriptName
-    message += ' [-p platforms] [-x level] [OPTIONS] pkg_project'
-    message += """
-
-Synopsis
-    Build and/or create .spk for packages.
-
-Options
-    -e {build_env}
-        Specify environment section in SynoBuildConf/depends. Default is [default].
-    -v {env version}
-        Specify target DSM version manually.
-    -p {platforms}
-        Specify target platforms. Default to detect available platforms under build_env/.
-    -P {platforms}
-        Specify platforms to be excluded.
-    -b {package_branch}
-        Specify branch of package.
-    -x {level}
-        Build dependant projects (to specified dependency level).
-    -s {suffix}
-        Specify suffix of folder of build environment (build_env/).
-    -m {milestone}
-        For release candidate when uploading. Specify which setting defined in SynoBuildConf/milestone to use.
-    -c: Build, install, upload (if build machine) package.
-    -u: Perform check for SynoUpdate and stop when update failed.
-    -U: No update. Do link and do clean, then run SynoBuild only.
-    -L: No update. No link and no clean, then run SynoBuild only.
-    -l: No update. No build and no clean, then link projects only.
-    -B: No Build. Do update only.
-    -I: Run install script to create spk.
-    -i: Run install script to create spk and upload results.
-    -z: Run for all platforms concurrently.
-    -J: Do SynoBuild with -J.
-    -j: Do SynoBuild with --jobs.
-    -S: Disable silent make.
-    --ccache-size {size}
-        Set size of ccache to reduce compiler activities. Default is 1G.
-    --ccache-clean
-        Build with a cleared ccache.
-    --no-builtin
-        Do not skip built-in projects.
-    --no-sign
-        Do not make code sign
-    --demo: Build demo package. Default environment folder is build_env-demo if no suffix is given.
-    --base: Build all projects (by default, only projects not on tag are built).
-    -h, --help
-        Show this help.
-
-Task Control
-                        (default) -U   -L   -I   -i   -c   -Uc
-    Update source code        o    x    x    x    x    o    x
-    Link platform             o    o    x    x    x    o    o
-    Build package             o    o    o    x    x    o    o
-    Install package           x    x    x    o    o    o    o
-    Upload spk files          x    x    x    x    o    o    o    (build machine only)
-    Tag and send mail         x    x    x    x    x    o    o    (build machine only)
-
-    Please use ONLY ONE of these options.
-"""
-    print >> sys.stderr, message
-    sys.exit(code)
+class PkgCreateError(RuntimeError):
+    pass
 
 
-def updatePkgScripts():
-    curr_dir = os.getcwd()
-    os.chdir(ScriptDir)
-    if os.path.isfile('include/gitutils'):
-        try: check_call('. include/gitutils; GitUpdatePkgScripts', shell=True)
-        except CalledProcessError: pass
+class SignPackageError(PkgCreateError):
+    pass
+
+
+class CollectPackageError(PkgCreateError):
+    pass
+
+
+class LinkPackageError(PkgCreateError):
+    pass
+
+
+class BuildPackageError(PkgCreateError):
+    pass
+
+
+class InstallPacageError(PkgCreateError):
+    pass
+
+
+class TraverseProjectError(PkgCreateError):
+    pass
+
+
+def show_msg_block(msg, title=None, error=False):
+    if not msg:
+        return
+
+    if error:
+        tok_s = "#"
+        tok_e = "#"
     else:
-        try: check_call('. include/envutils; UpdatePkgScripts', shell=True)
-        except CalledProcessError: pass
-    os.chdir(curr_dir)
+        tok_s = "="
+        tok_e = "-"
 
-def resolveBuildEnvPre(arch):
-    curr_dir = os.getcwd()
-    os.chdir(ScriptDir)
-    if os.path.isfile('include/gitutils'):
-        try: check_call('. include/gitutils; GitSetBuildEnvPre '+resolveBaseTarget(arch, DictEnv)+' '+arch, shell=True)
-        except CalledProcessError: pass
-    else:
-        try: check_call('. include/envutils; SetBuildEnvPre '+resolveBaseTarget(arch, DictEnv)+' '+arch, shell=True)
-        except CalledProcessError: reportMessage(ERROR_OTHER, "Please contact maintainer");
-    os.chdir(curr_dir)
+    if title:
+        print("\n" + tok_s * 60)
+        print("{:^60s}".format(title))
+        print(tok_e * 60)
+    print("\n".join(msg))
+    print()
 
-def resolveBuildEnvPost(arch, seen, ref_only):
-    param = arch
-    curr_dir = os.getcwd()
-    os.chdir(ScriptDir)
-    if os.path.isfile('include/gitutils'):
-        if DoBase:
-            for proj in seen | ref_only:
-                param += ' '+proj
-        try: check_call('. include/gitutils; GitSetBuildEnvPost '+resolveBaseTarget(arch, DictEnv)+' '+arch+' '+param, shell=True)
-        except CalledProcessError: pass
-    else:
-        reportMessage(ERROR_LOG, 'No post-action to be done')
-    os.chdir(curr_dir)
 
-def resolveDirSuffix():
-    if EnvSuffix != '': return '-'+EnvSuffix
-    elif DemoMode: return '-demo'
-    else: return ''
+def args_parser(argv):
+    argparser = argparse.ArgumentParser()
+    argparser.add_argument('-p', dest='platforms',
+                           help='Specify target platforms. Default to detect available platforms under build_env/')
+    argparser.add_argument('-e', '--env', dest='env_section', default='default',
+                           help='Specify environment section in SynoBuildConf/depends. Default is [default].')
+    argparser.add_argument('-v', '--version', dest='env_version', help='Specify target DSM version manually.')
+    argparser.add_argument('-x', dest='dep_level', type=int, default=1, help='Build dependant level')
+    argparser.add_argument('-b', dest='branch', default='master', help='Specify branch of package.')
+    argparser.add_argument('-s', dest='suffix', default="",
+                           help='Specify suffix of folder of build environment (build_env/).')
+    argparser.add_argument('-c', dest='collect', action='store_true', help='collect package.')
+    argparser.add_argument('-U', dest='update', action='store_false', help='Not update projects.')
+    argparser.add_argument('-L', dest='link', action='store_false', help='Not link projects.')
+    argparser.add_argument('-B', dest='build', action='store_false', help='Not build projects.')
+    argparser.add_argument('-I', dest='install', action='store_false', help='Not install projects.')
+    argparser.add_argument('-i', dest='only_install', action='store_true', help='Only install projects.')
+    argparser.add_argument('-S', dest="sign", action='store_false', help='Do not make code sign.')
+    argparser.add_argument('--build-opt', default="", help='Argument pass to SynoBuild')
+    argparser.add_argument('--install-opt', default="", help='Argument pass to SynoInstall')
+    argparser.add_argument('--print-log', action='store_true', help='Print SynoBuild/SynoInstall error log.')
+    argparser.add_argument('--min-sdk', dest='sdk_ver', default=MinSDKVersion, help='Min sdk version, default=6.0')
+    argparser.add_argument('package', help='Target packages')
 
-def updateProject(projects, target, dictVar=None):
-    proj_list = ''
-    for proj in projects:
-        if proj == 'uistring' and os.path.isdir(BaseDir+'/source/'+proj+'/.git'):
-            try: check_call('cd '+BaseDir+'/source/'+proj+'; git reset --hard; git pull --rebase=preserve', shell=True)
-            except CalledProcessError: pass
-            continue
-        if proj == VAR_KERNEL_PROJ:
-            continue
-        elif re.match(r'^\$', proj):
-            # is variable
-            if dictVar.has_key(proj):
-                proj_list += ' '+dictVar[proj]
-            else:
-                reportMessage(ERROR_DEP, 'Variable '+proj+' undefined')
+    args = argparser.parse_args(argv)
+    if not args.build:
+        args.link = False
+
+    if args.only_install:
+        args.update = args.link = args.build = False
+
+    if args.platforms:
+        args.platforms = args.platforms.split()
+
+    msg = []
+    for key, value in vars(args).items():
+        if isinstance(value, list):
+            value = " ".join(value)
         else:
-            # is normal project
-            proj_list += ' '+proj
-    proj_list = proj_list.strip()
-    if proj_list == '': return
-    update_opt = SynoUpdateOpt+' --env '+target
-    reportMessage(ERROR_LOG, 'env RenameLog=no '+ScriptDir+'/SynoUpdate '+update_opt+' '+proj_list)
-    try:
-        check_call('env RenameLog=no '+ScriptDir+'/SynoUpdate '+update_opt+' '+proj_list, shell=True)
-    except CalledProcessError:
-        if DoUpdateCheck:
-            reportMessage(ERROR_OTHER, 'SynoUpdate error, please check '+BaseDir+'/'+UpdateLog);
+            value = str(value)
+            msg.append("{:13s}".format(key) + ": " + value)
 
-class UpdateHook(TraverseHook):
-    def perform(self, config, info):
-        updateProject(config['proj']['curr'], self.branch, info['var'])
-        if self.do_base: updateProject(config['proj']['base'], self.arch+':'+config['base'], info['var'])
+    show_msg_block(msg, "Parse argument result")
 
-def writeUpdateLog(msg):
-    if not os.path.isdir(BaseDir+'/logs'): os.mkdir(BaseDir+'/logs')
-    try:
-        log = open(BaseDir+'/'+UpdateLog, 'a')
-    except IOError:
-        reportMessage(ERROR_IO, 'Fail to open '+BaseDir+'/'+UpdateLog)
-    else:
-        log.write(msg)
-        log.close()
+    return args
 
 
-def prepareProjects(arch):
-    cmd = ScriptDir+'/ProjectDepends.py -p '+arch+' '+ProjDependsOpt+' '+string.join(InputProjects, ' ')
-    cmd += ' '+string.join(ForPack['curr'], ' ')
-    if DoBase: cmd += ' '+string.join(ForPack['base'], ' ')
-    reportMessage(ERROR_LOG, cmd)
-    pipe = Popen(cmd, stdout=PIPE, shell=True)
-    seq = pipe.stdout.read().strip().split(' ')
+class WorkerFactory:
+    def __init__(self, args):
+        self.package = Package(args.package)
+        self.env_config = EnvConfig(args.package, args.env_section, args.env_version, args.platforms, args.dep_level,
+                                    args.branch, args.suffix)
+        self.package.chroot = self.env_config.get_chroot()
 
-    if not DoBase:
-        projects = Seen['curr'].intersection(seq)
-        extra = RefOnly['curr']
-    elif IgnoreBuiltin:
-        builtin = getBuiltinProjects(ScriptDir)
-        projects = (Seen['curr'] | (Seen['base'] - builtin)).intersection(seq)
-        extra = RefOnly['curr'] | (RefOnly['base'] - builtin)
-    else:
-        projects = (Seen['curr'] | Seen['base']).intersection(seq)
-        extra = RefOnly['curr'] | RefOnly['base']
-    if UpdateScriptExist: extra |= BasicProjects
-
-    dst_dir = EnvDir+'/'+getArchDir(arch, DictEnv)
-    if DoLink:
-        for proj in ['/source/'+p for p in (projects | extra)]+['/pkgscripts-ng']:
-            idx = string.find(proj, VIRTUAL_PROJ_SEP)
-            real_proj = proj if idx == -1 else proj[:idx]
-            try: check_call('rm -rf '+dst_dir+proj, shell=True)
-            except CalledProcessError: pass
-            reportMessage(ERROR_LOG, 'Link '+BaseDir+real_proj+' to '+dst_dir+proj)
-            try: check_call('cp -al '+BaseDir+real_proj+' '+dst_dir+proj, shell=True)
-            except CalledProcessError: pass
-    if DoBuild:
-        f = open(dst_dir+'/seen_curr.list', 'w')
-        f.write(string.join(Seen['curr'].intersection(seq), ' '))
-        f.close()
-    return projects
+    def new(self, worker_class, *args, **kwargs):
+        return worker_class(self.package, self.env_config, *args, **kwargs)
 
 
-def waitBackgroundProcess(plist):
-    global PkgError
-    print >> sys.stderr, '\tBackground pids: '+string.join([str(p.pid) for p in plist], ' ')
-    sys.stderr.write('Wait for:')
-    for p in plist:
-        sys.stderr.write(' '+str(p.pid))
-        p.communicate()
-        if p.returncode != 0: PkgError = True
-    print >> sys.stderr, ''
+class Worker:
+    def __init__(self, package, env_config):
+        self.package = package
+        self.env_config = env_config
+        self.__time_log = None
 
-def popenPipe(cmd):
-    p = Popen('set -o pipefail;'+cmd+';r=$?;set +o pipefail;exit $r', stdout=None, stderr=None, shell=True, executable='/bin/bash')
-    return p
+    def execute(self, *argv):
+        if not self._check_executable():
+            return
+
+        init_time = time()
+        if hasattr(self, 'title'):
+            print("\n" + "=" * 60)
+            print("{:^60s}".format('Start to run "%s"' % self.title))
+            print("-" * 60)
+        self._process_output(self._run(*argv))
+        self.__time_log = strftime('%H:%M:%S', gmtime(time()-init_time))
+
+    def _run(self):
+        pass
+
+    def _check_executable(self):
+        return True
+
+    def _process_output(self, output):
+        pass
+
+    def get_time_cost(self):
+        time_cost = []
+        if hasattr(self, 'title') and self.__time_log:
+            time_cost.append("%s: %s" % (self.__time_log, self.title))
+
+        return time_cost
 
 
-def buildPackage(package, projects, build_opt):
-    global PkgError
-    print(os.getcwd())
-    build_cmd =  'chroot . env PackageName=' + package + ' '+ PkgScripts + '/SynoBuild '
-    plist = []
-    curr_dir = os.getcwd()
-    for arch in Platforms:
-        arch_dir = EnvDir+'/'+getArchDir(arch, DictEnv)
-        if os.path.isdir(arch_dir): os.chdir(arch_dir)
-        else: continue
-        sdk_version = ".".join([str(i) for i in getEnvVer(arch, DictEnv)])
-        build_opt += ' --min-sdk ' + sdk_version
-        log_file = 'logs.build'
-        if not os.path.isdir('root/.tmp'): os.mkdir('root/.tmp')
-        if os.path.isfile(log_file): os.rename(log_file, log_file+'.old')
-        try: check_call('grep -q '+arch_dir+'/proc /proc/mounts', shell=True)
+class EnvPrepareWorker(Worker):
+    def __init__(self, package, env_config, update):
+        Worker.__init__(self, package, env_config)
+        self.update = update
+        self.sub_workers = []
+
+    def _run(self, *argv):
+        depends_cache = None
+        update_hook = None
+        for version, platforms in self.env_config.toolkit_versions.items():
+            print("Processing [%s]: " % version + " ".join(platforms))
+            dsm_ver, build_num = version.split('-')
+
+            if self.update:
+                update_hook = UpdateHook(self.env_config.branch, build_num)
+
+            for worker in self.sub_workers:
+                worker.execute(version, update_hook, depends_cache)
+
+    def add_subworker(self, sub_worker):
+        self.sub_workers.append(sub_worker)
+
+    def get_time_cost(self):
+        time_cost = []
+        if self.sub_workers:
+            for sub_worker in self.sub_workers:
+                time_cost += sub_worker.get_time_cost()
+
+        return time_cost
+
+
+class ProjectTraverser(Worker):
+    title = "Traverse project"
+
+    def _run(self, version, update_hook, cache):
+        dep_level = self.env_config.dep_level
+        platforms = self.env_config.toolkit_versions[version]
+
+        try:
+            visitor = ProjectVisitor(update_hook, dep_level, platforms, depends_cache=cache)
+            dict_projects = visitor.traverse(self.package.name)
+            visitor.checkout_git_refs()
+            visitor.show_proj_info()
+        except UpdateFailedError as e:
+            log = os.path.join(BaseDir, 'logs', 'error.update')
+            with open(log, 'r') as fd:
+                print(fd.read())
+            raise TraverseProjectError("Error log: " + log)
+        except ConflictError as e:
+            raise TraverseProjectError(str(e))
+
+        self.package.dict_projects = dict_projects
+
+
+class ProjectLinker(Worker):
+    title = "Link Project"
+
+    def _run(self, version, *argv):
+        tasks = []
+        for platform in self.env_config.toolkit_versions[version]:
+            chroot = self.env_config.get_chroot(platform)
+            if not os.path.isdir(os.path.join(chroot, 'source')):
+                os.makedirs(os.path.join(chroot, 'source'))
+            link_scripts(chroot)
+            tasks.append((set(BasicProjects) |
+                          self.package.get_build_projects(platform) |
+                          self.package.ref_projs, chroot))
+
+        try:
+            doParallel(link_projects, tasks)
+        except LinkProjectError as e:
+            raise LinkPackageError(str(e))
+
+
+class CodeSignWorker(Worker):
+    title = "Generate code sign"
+
+    def _run(self):
+        return doPlatformParallel(self._code_sign, self.env_config.platforms)
+
+    def check_gpg_key_exist(self):
+        try:
+            gpg = check_output(['gpg', '--list-keys']).decode().strip()
         except CalledProcessError:
-            try: check_call('chroot . /bin/mount /proc', shell=True)
-            except CalledProcessError: pass
+            return False
 
-        cmd = build_cmd+' -p '+arch+' '+build_opt+' '+string.join(projects[arch], ' ')
-        redirect = ' 2>&1 >> '+log_file if RunBackground else ' 2>&1 | tee -a '+log_file
-        hook = 'source/'+PkgProject+'/SynoBuildConf/prebuild'
-        if os.access(hook, os.X_OK): cmd = hook+redirect+';'+cmd
-        cmd += redirect
-        hook = 'source/'+PkgProject+'/SynoBuildConf/postbuild'
-        if os.access(hook, os.X_OK): cmd += ';'+hook+redirect
-        reportMessage(ERROR_LOG, cmd)
+        return gpg
 
-        if RunBackground:
-            plist.append(Popen(cmd, stdout=None, stderr=None, shell=True))
-        else:
-            p = popenPipe(cmd)
-            p.communicate()
-            if p.returncode != 0: PkgError = True
-    os.chdir(curr_dir)
-    if RunBackground: waitBackgroundProcess(plist)
+    def _code_sign(self, platform):
+        spks = self.package.spk_config.chroot_spks(self.env_config.get_chroot(platform))
+        if not spks:
+            raise SignPackageError('[%s] No spk found' % platform)
 
+        for spk in spks:
+            cmd = ' php ' + PkgScripts + '/CodeSign.php --sign=/image/packages/' + os.path.basename(spk)
+            with Chroot(self.env_config.get_chroot(platform)):
+                if not self.check_gpg_key_exist():
+                    raise SignPackageError("[%s] Gpg key not exist. You can add `-S' to skip package code sign or import gpg key first." % platform)
 
-def installPackage(package, debug_mode):
-    global PkgError
-    install_cmd = 'chroot . ' + PkgScripts + '/SynoInstall'
-    install_opt = '--with-debug' if debug_mode else ''
-    plist = []
-    curr_dir = os.getcwd()
-    for arch in Platforms:
-        arch_dir = EnvDir+'/'+getArchDir(arch, DictEnv)
-        if os.path.isdir(arch_dir): os.chdir(arch_dir)
-        else: continue
-        log_file = 'logs.install'
-        if os.path.isfile(log_file): os.rename(log_file, log_file+'.old')
-
-        cmd = install_cmd+' -p '+arch+' '+install_opt+' '+package
-        reportMessage(ERROR_LOG, cmd)
-        if RunBackground:
-            cmd += ' 2>&1 > '+log_file
-            plist.append(Popen(cmd, stdout=None, stderr=None, shell=True))
-        else:
-            p = popenPipe(cmd+' 2>&1 | tee '+log_file)
-            p.communicate()
-            if p.returncode != 0: PkgError = True
-    os.chdir(curr_dir)
-    if RunBackground: waitBackgroundProcess(plist)
+                print("[%s] Sign package: " % platform + cmd)
+                try:
+                    check_call(cmd, shell=True, executable="/bin/bash")
+                except CalledProcessError:
+                    raise SignPackageError('Failed to create signature: ' + spk)
 
 
-def packFlash(package, platforms):
-    if not os.access(ScriptDir+'/PkgFlash', os.X_OK): return
-    global PkgError
-    plist = []
-    result_dir = BaseDir+'/result_spk'+resolveDirSuffix()
-    for arch in platforms:
-        arch_dir = EnvDir+'/'+getArchDir(arch, DictEnv)
-        log_file = arch_dir+'/logs.flash'
-        cmd = ScriptDir+'/PkgFlash '+arch+' '+package+' '+result_dir+' '+arch_dir
-        reportMessage(ERROR_LOG, cmd)
-        if RunBackground:
-            cmd += ' 2>&1 > '+log_file
-            plist.append(Popen(cmd, stdout=None, stderr=None, shell=True))
-        else:
-            p = popenPipe(cmd+' 2>&1 | tee '+log_file)
-            p.communicate()
-            if p.returncode != 0: PkgError = True
-    if RunBackground: waitBackgroundProcess(plist)
+class PackageCollecter(Worker):
+    title = "Collect package"
 
-def sendReleaseMail(package, info):
-    cmd = ScriptDir+'/ReleaseMail.php'
-    if not os.access(cmd, os.X_OK): return
-    version = info['version']
-    try:
-        build_num = version.split('-')[-1]
-        cmd += ' '+build_num+' '+package
-    except IndexError:
-        reportMessage(ERROR_LOG, 'Fail to get build number from "'+version+'", use it directly to send relase mail.')
-        cmd += ' '+version+' '+package
-    reportMessage(ERROR_DEBUG, cmd)
-    try: check_call(cmd, shell=True)
-    except CalledProcessError: pass
+    def _run(self):
+        spks = defaultdict(list)
 
-def createGitTag(package, platforms, info):
-    cmd = ScriptDir+'/PkgTag.py'
-    if not os.access(cmd, os.X_OK): return
-    name = info['package']
-    version = info['version']
+        dest_dir = self.package.spk_config.spk_result_dir(self.env_config.suffix)
+        if os.path.exists(dest_dir):
+            old_dir = dest_dir + '.bad.' + strftime('%Y%m%d-%H%M', localtime())
+            if os.path.isdir(old_dir):
+                shutil.rmtree(old_dir)
+            os.rename(dest_dir, old_dir)
+        os.makedirs(dest_dir)
 
-    # Add tag
-    tag_name = name+'-'+version+'-'+strftime('%y%m%d', localtime())
-    tag_opt = '-y -p "'+string.join(platforms, ' ')+'"'
-    if EnvTag != '': tag_opt += ' -e '+EnvTag
-    if EnvSuffix != '': tag_opt += ' -s '+EnvSuffix
-    if pythonutils.ENABLE_DEBUG: tag_opt += ' --debug'
-    if DoBase: tag_opt += ' --base'
-    cmd += ' '+tag_opt+' '+tag_name+' '+package
-    reportMessage(ERROR_LOG, cmd)
-    try: check_call(cmd, shell=True)
-    except CalledProcessError: pass
+        for platform in self.env_config.platforms:
+            for spk in self.package.spk_config.chroot_spks(self.env_config.get_chroot(platform)):
+                spks[os.path.basename(spk)].append(spk)
 
-    # Commit uistring
-    cmd = 'cd '+BaseDir+'/source/uistring;'
-    cmd += 'git add .;'
-    cmd += 'git commit -m "'+name+' '+version+'. Committed through '+ScriptName+'.";'
-    cmd += 'git push;'
-    reportMessage(ERROR_DEBUG, cmd)
-    try: check_call(cmd, shell=True)
-    except CalledProcessError: pass
-
-def signPackage(arch, pattern):
-    global PkgError
-    major_ver, minor_ver = getEnvVer(arch, DictEnv)
-    major_ver = int(major_ver)
-    minor_ver = int(minor_ver)
-    arch_dir = EnvDir + '/' + getArchDir(arch, DictEnv)
-    spk_dir = '/image/packages/'
-    src_dir = arch_dir + spk_dir
-
-    if major_ver < 5:
-        return
-    if not os.path.isdir(arch_dir):
-        return
-    for spk in os.listdir(src_dir):
-        if not re.match(pattern, spk):
-            continue
-        cmd = 'chroot ' + arch_dir + ' php ' + PkgScripts + '/CodeSign.php --sign=' + spk_dir + spk
-        try: check_call(cmd, shell = True)
-        except CalledProcessError:
-            PkgError = True
-            reportMessage(ERROR_LOG, 'Failed to create signature: ' + spk)
-
-def collectPackage(package, do_sign, milestone=None):
-    global PkgError
-    global FlashFail
-    supported_platforms = []
-    for arch in Platforms:
-        arch_dir = EnvDir+'/'+getArchDir(arch, DictEnv)
-        if os.path.isfile(arch_dir+'/source/'+package+'/INFO'):
-            supported_platforms.append(arch)
-    if len(supported_platforms) == 0:
-        reportMessage(ERROR_LOG, 'No INFO file found!')
-        return
-
-    info = readPackageInfo(EnvDir+'/'+getArchDir(supported_platforms[0], DictEnv)+'/source/'+package+'/INFO')
-    package_id = info['package']
-    name = package_id
-    version = info['version']
-
-    # read setting file
-    settings = readPackageSetting(EnvDir+'/'+getArchDir(supported_platforms[0], DictEnv)+'/source/'+package+'/SynoBuildConf/settings', package)
-    if "pkg_name" in settings:
-        name = settings["pkg_name"][0]
-
-    pattern = name + '.*' + version + '.*spk$'
-
-    result_dir = 'result_spk'+resolveDirSuffix()
-    dst_dir = BaseDir+'/'+result_dir+'/'+name+'-'+version
-    if os.path.exists(dst_dir):
-        rename_dir = dst_dir+'.bad.'+strftime('%Y%m%d-%H%M', localtime())
-        if os.path.isdir(rename_dir):
-            rmtree(rename_dir)
-        os.rename(dst_dir, rename_dir)
-    os.makedirs(dst_dir)
-    for arch in supported_platforms:
-        arch_dir = EnvDir+'/'+getArchDir(arch, DictEnv)
-        src_dir = arch_dir + '/image/packages/'
-
-        if do_sign:
-            signPackage(arch, pattern)
-
-        hook = arch_dir+'/source/'+package+'/SynoBuildConf/collect'
-        hook_env = {'SPK_SRC_DIR': src_dir, 'SPK_DST_DIR': dst_dir, 'SPK_VERSION': version}
-        if os.path.isfile(hook):
-            if not os.access(hook, os.X_OK):
-                reportMessage(ERROR_LOG, hook+' not executable. Ignore it.')
-            else:
+            hook = self.package.collect
+            if os.path.isfile(hook):
+                print("Run hook " + hook)
+                hook_env = {
+                    'SPK_SRC_DIR': self.package.spk_config.chroot_packages_dir(self.env_config.get_chroot(platform)),
+                    'SPK_DST_DIR': dest_dir,
+                    'SPK_VERSION': self.package.spk_config.version,
+                    'SPK_NAME': self.package.spk_config.name
+                }
                 pipe = Popen(hook, shell=True, stdout=None, stderr=None, env=hook_env)
                 pipe.communicate()
-                if pipe.returncode != 0: PkgError = True
+                if pipe.returncode != 0:
+                    raise CollectPackageError("Execute package collect script failed.")
+
+        for spk, source_list in spks.items():
+            print("%s -> %s" % (source_list[0], dest_dir))
+            try:
+                shutil.copy(source_list[0], dest_dir)
+            except:
+                raise CollectPackageError("Collect package failed")
+
+            if len(source_list) > 1:
+                raise CollectPackageError("Found duplicate %s: \n%s" % (spk, "\n".join(source_list)))
+
+
+class CommandRunner(Worker):
+    __log__ = None
+    __error_msg__ = None
+    __failed_exception__ = None
+
+    def _rename_log(self, suffix='.old'):
+        if os.path.isfile(self.log):
+            os.rename(self.log, self.log + suffix)
+
+    def _run(self, *argv):
+        self._rename_log()
+        cmd = self._wrap_cmd(self._get_command(*argv))
+
+        try:
+            print(" ".join(cmd))
+            output = check_output(" ".join(cmd), stderr=STDOUT, shell=True, executable="/bin/bash").decode()
+            self._post_hook()
+        except CalledProcessError as e:
+            output = e.output.decode()
+            print(output)
+            raise self.__failed_exception__(self.__error_msg__)
+
+        return output
+
+    def _get_command(self):
+        raise PkgCreateError("Not implement")
+
+    def _post_hook(self):
+        pass
+
+    def _process_output(self, output):
+        pass
+
+    def _wrap_cmd(self, cmd):
+        return ["set -o pipefail;"] + cmd + ["2>&1", '|', 'tee', self.log]
+
+    @property
+    def log(self):
+        return os.path.join(BaseDir, self.__log__)
+
+
+# Run SynoBuild/SynoInstall in chroot
+class ChrootRunner(CommandRunner):
+    def __init__(self, package, env_config, print_log=False):
+        CommandRunner.__init__(self, package, env_config)
+        self.print_log = print_log
+        self.__log__ = None
+
+    def _process_output(self, output):
+        msg = []
+        log_file = []
+
+        for platform, failed_projs in output.items():
+            if not failed_projs:
                 continue
-        info = readPackageInfo(arch_dir+'/source/'+package+'/INFO')
-        src_files = src_dir+name+'*-'+version+'*.spk'
-        try: check_call('mv '+src_files+' '+dst_dir+'/', shell=True)
-        except CalledProcessError: reportMessage(ERROR_LOG, 'Fail to mv '+src_files)
-    if PkgError: FlashFail = True
 
-    if not PkgError and os.access(ScriptDir+'/PkgImage', os.X_OK):
-        upload_opt = '--suffix '+EnvSuffix if EnvSuffix != '' else ''
-        if milestone != None: upload_opt += ' --milestone "'+BaseDir+'/source/'+package+'/SynoBuildConf/milestone:'+milestone+'"'
-        if DemoMode: upload_opt += ' --demo'
-        log_file = BaseDir+'/logs/error.upload'
-        if os.path.isfile(log_file): os.rename(log_file, log_file+'.old')
-        cmd = ScriptDir+'/PkgImage '+upload_opt+' '+version+' '+name+' 2>&1 | tee '+log_file
-        reportMessage(ERROR_DEBUG, cmd)
-        try: check_call(cmd, shell=True)
-        except CalledProcessError: PkgError = True
-    if not PkgError and not DemoMode:
-        createGitTag(package, supported_platforms, info)
-        if DoSendMail: sendReleaseMail(package, info)
-    return
+            if self.print_log:
+                self._dump_log(platform)
+
+            msg.append(self.__error_msg__ + ' [%s] : %s' % (platform, " ".join(failed_projs)))
+            log_file.append("Error log: " + self.get_platform_log(platform))
+
+        if msg:
+            show_msg_block(msg + log_file, title=self.__error_msg__, error=True)
+            raise self.__failed_exception__(self.__error_msg__)
+
+    def _dump_log(self, platform):
+        log = self.get_platform_log(platform)
+        with open(log, 'r') as fd:
+            show_msg_block(fd.read().split("\n"), title=log, error=True)
+
+    def get_platform_log(self, platform):
+        return os.path.join(self.env_config.get_chroot(platform), self.log)
+
+    def run_command(self, platform, *argv):
+        cmd = self._wrap_cmd(self._get_command(platform, *argv))
+
+        with Chroot(self.env_config.get_chroot(platform)):
+            self._rename_log()
+            try:
+                print("[%s] " % platform + " ".join(cmd))
+                with open(os.devnull, 'wb') as null:
+                    check_call(" ".join(cmd), stdout=null, shell=True, executable='/bin/bash')
+            except CalledProcessError:
+                failed_projs = self.__get_failed_projects()
+                if not failed_projs:
+                    raise self.__failed_exception__("%s failed. \n Error log: %s"
+                                                    % (" ".join(cmd), self.get_platform_log(platform)))
+                return failed_projs
+
+    def __get_failed_projects(self):
+        projects = []
+        with open(self.log, 'r') as fd:
+            for line in fd:
+                if 'Error(s) occurred on project' not in line:
+                    continue
+                projects.append(line.split('"')[1])
+
+        return projects
+
+    def _run(self):
+        return doPlatformParallel(self.run_command, self.env_config.platforms)
+
+    @property
+    def log(self):
+        raise PkgCreateError("Not implemented")
 
 
-def resolveSettings():
-    global EnvDir
-    EnvDir = BaseDir+'/build_env'+resolveDirSuffix()
-    if not os.path.isdir(EnvDir):
-        reportMessage(ERROR_ARG, 'Target folder '+EnvDir+' not found.')
-    reportMessage(ERROR_LOG, 'Check available platforms under '+EnvDir)
+class PackageBuilder(ChrootRunner):
+    title = "Build Package"
+    log = "logs.build"
+    __error_msg__ = "Failed to build package."
+    __failed_exception__ = BuildPackageError
 
-    if not Platforms :
-        Platforms.extend(detectPlatforms(EnvDir, DictEnv))
-    else:
-        for arch in Platforms:
-            arch_dir = EnvDir+'/'+getArchDir(arch, DictEnv)
-            if not os.path.isdir(arch_dir):
-                reportMessage(ERROR_ARG, 'Platform '+arch+'('+arch_dir+') not exist in '+EnvDir)
-    for arch in ExcludedPlatforms:
-        try: Platforms.remove(arch)
-        except: pass
-    if len(Platforms) == 0:
-        reportMessage(ERROR_ARG, 'No existing platform specified')
+    def __init__(self, package, env_config, sdk_ver, build_opt, *argv, **kwargs):
+        ChrootRunner.__init__(self, package, env_config, *argv, **kwargs)
+        self.build_opt = build_opt
+        self.sdk_ver = sdk_ver
 
-    # Check whether chroot is ready
-    for arch in Platforms:
-        arch_dir = EnvDir+'/'+getArchDir(arch, DictEnv)
-        check_call('cp -f /etc/resolv.conf '+arch_dir+'/etc/', stderr=None, shell=True)
-        check_call('cp -f /etc/hosts '+arch_dir+'/etc/', stderr=None, shell=True)
-        try: check_call('chroot '+arch_dir+' echo -n ""', stderr=None, shell=True)
-        except CalledProcessError: reportMessage(ERROR_ARG, 'Environment for '+arch+'('+arch_dir+') is not ready')
+    def _get_command(self, platform):
+        build_script = os.path.join(PkgScripts, 'SynoBuild')
+        projects = self.package.get_build_projects(platform)
+
+        build_cmd = ['env', 'PackageName=' + self.package.name, build_script, '--' + platform,
+                     '-c', '--min-sdk', self.sdk_ver]
+        if self.build_opt:
+            build_cmd.append(self.build_opt)
+
+        return build_cmd + list(projects)
+
+
+class PackageInstaller(ChrootRunner):
+    title = "Install Package"
+    log = "logs.install"
+    __error_msg__ = "Failed to install package."
+    __failed_exception__ = InstallPacageError
+
+    def __init__(self, package, env_config, install_opt, print_log):
+        ChrootRunner.__init__(self, package, env_config, print_log)
+        self.install_opt = list(install_opt)
+
+    def _get_command(self, platform):
+        cmd = ['env', 'PackageName=' + self.package.name, os.path.join(PkgScripts, 'SynoInstall')]
+        if self.install_opt:
+            cmd += self.install_opt
+
+        return cmd + [self.package.name]
+
+
+class Package():
+    def __init__(self, package):
+        self.name = package
+        self.package_proj = BuildEnv.Project(self.name)
+        self.dict_projects = dict()
+        self.__additional_build = defaultdict(list)
+        self.__spk_config = None
+        self.__chroot = None
+
+    def get_additional_build_projs(self, platform):
+        if platform in self.__additional_build:
+            return set(self.__additional_build[platform])
+        return set()
+
+    def add_additional_build_projs(self, platform, projs):
+        self.__additional_build[platform] += projs
+
+    @property
+    def ref_projs(self):
+        return self.dict_projects['refs'] | self.dict_projects['refTags']
+
+    def get_build_projects(self, platform):
+        return self.dict_projects['branches'] | self.get_additional_build_projs(platform)
+
+    @property
+    def spk_config(self):
+        if not self.__spk_config:
+            self.__spk_config = SpkConfig(self.name, self.info, self.settings)
+
+        return self.__spk_config
+
+    @property
+    def info(self):
+        return self.package_proj.info(self.chroot)
+
+    @property
+    def settings(self):
+        return self.package_proj.settings(self.chroot)
+
+    @property
+    def collect(self):
+        return self.package_proj.collect(self.chroot)
+
+    @property
+    def chroot(self):
+        return self.__chroot
+
+    @chroot.setter
+    def chroot(self, chroot):
+        self.__chroot = chroot
+
+
+class SpkConfig:
+    def __init__(self, name, info, settings):
+        self.info = config_parser.KeyValueParser(info)
+        try:
+            self.settings = config_parser.PackageSettingParser(settings).get_section(name)
+        except config_parser.ConfigNotFoundError:
+            self.settings = None
+
+    @property
+    def name(self):
+        if self.settings and "pkg_name" in self.settings:
+            return self.settings["pkg_name"][0]
+
+        return self.info['package']
+
+    @property
+    def version(self):
+        return self.info['version']
+
+    @property
+    def build_num(self):
+        try:
+            return self.version.split("-")[-1]
+        except IndexError:
+            return self.version
+
+    @property
+    def spk_pattern(self):
+        return self.name + '*' + self.version + '*spk'
+
+    def chroot_packages_dir(self, chroot):
+        return os.path.join(chroot, 'image', 'packages')
+
+    def chroot_spks(self, chroot):
+        return glob.glob(os.path.join(self.chroot_packages_dir(chroot), self.spk_pattern))
+
+    def spk_result_dir(self, suffix=""):
+        if suffix:
+            suffix = '-' + suffix
+
+        return os.path.join(BaseDir, 'result_spk' + suffix, self.name + '-' + self.version)
+
+
+class EnvConfig():
+    def __init__(self, package, env_section, version, platforms, dep_level, branch, suffix):
+        self.dict_env = getBaseEnvironment(package, env_section, version)
+        self.suffix = suffix
+        self.env_section = env_section
+        self.env_version = version
+        self.dep_level = dep_level
+        self.branch = branch
+        self.platforms = set(self.__get_package_platforms(platforms))
+        self.toolkit_versions = self.__resolve_toolkit_versions()
+
+        if not self.platforms:
+            raise PkgCreateError("No platform found!")
+
+    def __get_package_platforms(self, platforms):
+        def __get_toolkit_available_platforms(version):
+            toolkit_config = os.path.join(ScriptDir, 'include', 'toolkit.config')
+            major, minor = version.split('.')
+            pattern = '$AvailablePlatform_%s_%s' % (major, minor)
+            return check_output('source %s && echo %s' % (toolkit_config, pattern),
+                                shell=True, executable='/bin/bash').decode().split()
+
+        package_platforms = set()
+        for platform in self.dict_env:
+            if platform == 'all':
+                package_platforms |= set(__get_toolkit_available_platforms(self.dict_env['all']))
+            else:
+                package_platforms.add(platform)
+
+        if platforms:
+            package_platforms = set(package_platforms) & set(platforms)
+
+        # remove platform if dir not exist
+        return [platform for platform in package_platforms if os.path.isdir(self.get_chroot(platform))]
+
+    def __get_version(self, platform):
+        if platform in self.dict_env:
+            version = self.dict_env[platform]
+        elif 'all' in self.dict_env:
+            version = self.dict_env['all']
+        else:
+            raise PkgCreateError("Package version not found")
+
+        return version
+
+    def get_version_map_file(self, platform):
+        return os.path.join(self.get_chroot(platform), 'version_map')
+
+    def get_chroot(self, platform=None):
+        if not platform:
+            platform = list(self.platforms)[0]
+
+        return BuildEnv.getChrootSynoBase(platform, self.__get_version(platform), self.suffix)
+
+    def __resolve_toolkit_versions(self):
+        def __get_toolkit_version(version_file):
+            version = VersionFile(version_file)
+            return "%s-%s" % (version.dsm_version, version.buildnumber)
+
+        versions = defaultdict(list)
+        for platform in self.platforms:
+            toolkit_version = __get_toolkit_version(self.__get_version_file(platform))
+            versions[toolkit_version].append(platform)
+
+        if len(versions) > 1:
+            msg = []
+            for version, platforms in versions.items():
+                msg.append("[%s]: %s" % (version, " ".join(platforms)))
+            show_msg_block(msg, title="[WARNING] Multiple toolkit version found", error=True)
+
+        return versions
+
+    def __get_version_file(self, platform):
+        return os.path.join(self.get_chroot(platform), 'PkgVersion')
+
+    def get_chroot_synodebug(self, platform):
+        return os.path.join(self.get_chroot(platform), 'image', 'synodebug')
+
+    @property
+    def prebuild_projects(self):
+        return BuildEnv.getList('PreBuildProjects') or []
+
+
+class PackagePacker:
+    def __init__(self):
+        self.__workers = []
+
+    def add_worker(self, worker):
+        self.__workers.append(worker)
+
+    def pack_package(self):
+        for worker in self.__workers:
+            worker.execute()
+
+    def show_time_cost(self):
+        time_cost = []
+        for worker in self.__workers:
+            time_cost += worker.get_time_cost()
+
+        show_msg_block(time_cost, title="Time Cost Statistic")
+
+
+def getBaseEnvironment(proj, env, ver=None):
+    dict_env = {}
+    if ver:
+        dict_env['all'] = ver
+        return dict_env
+
+    if not env:
+        env = 'default'
+
+    depends = config_parser.DependsParser(BuildEnv.Project(proj).depends_script)
+    dict_env = depends.get_env_section(env)
+    return dict_env
+
+
+def main(argv):
+    args = args_parser(argv)
+    packer = PackagePacker()
+    worker_factory = WorkerFactory(args)
+    new_worker = worker_factory.new
+
+    prepare_worker = new_worker(EnvPrepareWorker, args.update)
+    prepare_worker.add_subworker(new_worker(ProjectTraverser))
+    if args.link:
+        prepare_worker.add_subworker(new_worker(ProjectLinker))
+    packer.add_worker(prepare_worker)
+
+    if args.build:
+        packer.add_worker(new_worker(PackageBuilder, args.sdk_ver, args.build_opt, args.print_log))
+
+    if args.install:
+        packer.add_worker(new_worker(PackageInstaller,
+                                     install_opt=[args.install_opt, '--with-debug'],
+                                     print_log=args.print_log))
+        packer.add_worker(new_worker(PackageInstaller,
+                                     install_opt=[args.install_opt],
+                                     print_log=args.print_log))
+
+    if args.collect:
+        if args.sign:
+            packer.add_worker(new_worker(CodeSignWorker))
+
+        packer.add_worker(new_worker(PackageCollecter))
+
+    packer.pack_package()
+    packer.show_time_cost()
 
 if __name__ == '__main__':
-    RunBackground = False
-    DoBase = False
-    IgnoreBuiltin = True
-    DoUpdate = DoLink = DoBuild = DoSign = True
-    DoInstall = DoUpload = False
-    DoSendMail = False
-    DoUpdateCheck = False
-    DemoMode = False
-    Milestone = None
-    BuildFail = InstallFail = FlashFail = PkgError = False
-    Branch = 'master'
-    Platforms = []
-    ExcludedPlatforms = []
-    EnvSuffix = ''
-    EnvTag = ''
-    EnvVer = ''
-    SynoUpdateOpt = ''
-    SynoBuildOpt = ''
-    ProjDependsOpt = ''
-    UpdateLog = 'logs/error.update'
-
-    # Parse options
-    Date0 = time()
-    LongOptions = ['base', 'no-builtin', 'help', 'debug', 'demo', 'ccache-size=', 'ccache-clean', 'no-sign']
+    ret = 0
     try:
-        DictOpt, ListArg = getopt(sys.argv[1:], 'p:P:e:v:b:x:zs:j:m:JIicULlBSuh', LongOptions)
-    except GetoptError:
-        displayUsage(ERROR_ARG)
-    for opt, arg in DictOpt:
-        if opt == '-p': Platforms = arg.split(' ')
-        if opt == '-P': ExcludedPlatforms = arg.split(' ')
-        if opt == '-e': EnvTag = arg
-        if opt == '-v': EnvVer = arg
-        if opt == '-b': Branch = arg
-        if opt == '-x':
-            if re.match(r'^[0-9]+$', arg): ProjDependsOpt = '-x'+arg
-            else: reportMessage(ERROR_ARG, 'Invalid dependency level "'+arg+'"')
-        if opt == '-z': RunBackground = True
-        if opt == '-s': EnvSuffix = arg
-        if opt == '-j': SynoBuildOpt += ' --jobs '+arg
-        if opt == '-J': SynoBuildOpt += ' -J'
-        if opt == '-A': SynoBuildOpt += ' --without-ccache'
-        if opt == '-I' or opt == '-i':
-            DoUpdate = DoLink = DoBuild = False
-            DoInstall = True
-            DoUpload = True if opt == '-i' else False
-        if opt == '-m': Milestone = arg
-        if opt == '-c': DoInstall = DoUpload = DoSendMail =  True
-        if opt == '-U': DoUpdate = False
-        if opt == '-L': DoUpdate = DoLink = False
-        if opt == '-l': DoUpdate = DoBuild = False
-        if opt == '-B': DoLink = DoBuild = False
-        if opt == '-S': SynoBuildOpt += ' -S'
-        if opt == '-u': DoUpdateCheck = True
-        if opt == '--no-sign':
-            DoSign = False
-        if opt == '--demo':
-            DemoMode = True
-            os.environ['SYNO_DEMO_MODE'] = 'Yes'
-        if opt == '--base': DoBase = True
-        if opt == '--no-builtin':
-            DoBase = True
-            IgnoreBuiltin = False
-            SynoUpdateOpt += ' --no-builtin'
-            SynoBuildOpt += ' --no-builtin'
-        if opt == '--debug': pythonutils.ENABLE_DEBUG = True
-        if opt == '--ccache-size':
-            if re.match(r'^[0-9]+(\.[0-9]+)?[KMG]?$', arg): SynoBuildOpt += ' --with-ccache '+arg
-            else: reportMessage(ERROR_ARG, 'Invalid ccache size "'+arg+'"')
-        if opt == '--ccache-clean': SynoBuildOpt += ' --with-clean-ccache'
-        if opt == '-h' or opt == '--help': displayUsage(ERROR_NONE)
+        main(sys.argv[1:])
+        print("[SUCCESS] " + " ".join(sys.argv) + " finished.")
+    except PkgCreateError as e:
+        ret = 1
+        print("\n\033[91m%s:\033[0m" % type(e).__name__)
+        print(str(e))
+        print("\n[ERROR] " + " ".join(sys.argv) + " failed!")
 
-    # Get environment
-    if DoUpdate: updatePkgScripts()
-    if len(ListArg) == 0:
-        reportMessage(ERROR_ARG, 'Please specify package project')
-    PkgProject = os.path.basename(ListArg[0])
-    InputProjects = set(os.path.basename(p) for p in ListArg)
-    UpdateScriptExist = True if os.access(ScriptDir+'/SynoUpdate', os.X_OK) else False
-
-    if DoUpdate and UpdateScriptExist:
-        if os.path.isfile(BaseDir+'/'+UpdateLog):
-            os.rename(BaseDir+'/'+UpdateLog, BaseDir+'/'+UpdateLog+'.old')
-        updateProject(BasicProjects, 'master')
-        updateProject(InputProjects, Branch)
-    DictEnv = getBaseEnvironment(BaseDir, PkgProject, EnvTag, EnvVer)
-    resolveSettings()
-
-    if Milestone != None:
-        milestone_file = BaseDir+'/source/'+PkgProject+'/SynoBuildConf/milestone'
-        if not os.path.isfile(milestone_file):
-            reportMessage(ERROR_ARG, '"'+milestone_file+'" not exist')
-        try: check_call(ScriptDir+'/include/check CheckMileStone '+milestone_file+ ' "'+Milestone+'"', shell=True)
-        except CalledProcessError: reportMessage(ERROR_ARG, 'Milestone "'+Milestone+'" not found')
-
-    # Update, link and build
-    if DoUpdate or DoLink or DoBuild:
-        ProjectList = {}
-        for arch in Platforms:
-            hook = UpdateHook(arch, Branch, '', DoBase) if UpdateScriptExist and DoUpdate else None
-            if UpdateScriptExist and DoUpdate: writeUpdateLog('\n\n==== Updating for '+arch+' ====\n\n')
-            resolveBuildEnvPre(arch)
-            Seen, RefOnly, ForPack = traverseDependProjects(InputProjects, arch, DictEnv, ScriptDir, DoBase, False, hook)
-            resolveBuildEnvPost(arch, Seen['base'], RefOnly['base'])
-            ProjectList[arch] = prepareProjects(arch)
-        if DoLink: SynoBuildOpt += ' --dontask'
-        else: SynoBuildOpt += ' --noclean'
-        DateBuild0 = time()
-        if DoBuild: buildPackage(PkgProject, ProjectList, SynoBuildOpt)
-        if PkgError: BuildFail = True
-        DateBuild1 = time()
-
-    # Install, collect spk
-    DateInstall0 = time()
-    if not PkgError and DoInstall:
-        installPackage(PkgProject, True)
-        if not PkgError: installPackage(PkgProject, False)
-        if not PkgError: collectPackage(PkgProject, DoSign, Milestone)
-    DateInstall1 = time()
-
-    # Show time consumption
-    print ''
-    if DoBuild: showTimeCost(DateBuild0, DateBuild1, 'Build')
-    if DoInstall: showTimeCost(DateInstall0, DateInstall1, 'Install')
-    print '\n['+ctime()+'] '+ScriptName+' Finish\n'
-    Date1 = time()
-    showTimeCost(Date0, Date1, ScriptName)
-
-    # Report
-    if PkgError:
-        log_msg = '!\nPlease check '+EnvDir+'/ds.{'+string.join(Platforms, ',')+'}/'
-        err_msg = 'Some error(s) happened!'
-        if BuildFail: err_msg += log_msg+'logs.build'
-        if InstallFail: err_msg += log_msg+'logs.install'
-        if FlashFail: err_msg += log_msg+'logs.flash'
-        reportMessage(ERROR_OTHER, err_msg)  # Exit
-    sys.exit(ERROR_NONE)
+    sys.exit(ret)
