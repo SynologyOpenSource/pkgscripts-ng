@@ -273,6 +273,9 @@ pkg_get_tar_option() {
 }
 
 pkg_make_package() { # <source path> <dest path>
+	pkg_make_inner_tarball $@
+}
+pkg_make_inner_tarball() { # <source path> <dest path>
 	local source_path=$1
 	local dest_path=$2
 	local package_name="package.tgz"
@@ -282,11 +285,11 @@ pkg_make_package() { # <source path> <dest path>
 
 	# check parameters
 	if [ -z "$source_path" -o ! -d "$source_path" ]; then
-		pkg_warn "pkg_make_package: bad parameters, please set source dir"
+		pkg_warn "pkg_make_inner_tarball: bad parameters, please set source dir"
 		return 1
 	fi
 	if [ -z "$dest_path"  -o ! -d "$dest_path" ]; then
-		pkg_warn "pkg_make_package: bad parameters, please set destination dir"
+		pkg_warn "pkg_make_inner_tarball: bad parameters, please set destination dir"
 		return 1
 	fi
 
