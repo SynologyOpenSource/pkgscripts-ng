@@ -70,6 +70,8 @@ pkg_get_platform() { # [path of env.mak (default: /env.mak)]
 			ALPINE)			arch="alpine" ;;
 			STM_MONACO)             arch="monaco" ;;
 			MARVELL_ARMADA38X)      arch="armada38x" ;;
+			HISILICON_HI3535)       arch="hi3535" ;;
+			BROADWELL)		arch="broadwell" ;;
 			*)			arch="" ;;
 		esac
 	fi
@@ -82,8 +84,8 @@ plat_to_unified_plat() {
 	local unified_plat=
 
 	case "$plat" in
-		x86 | bromolow | cedarview | avoton | braswell )
-			unified_plat="x86 bromolow cedarview avoton braswell"
+		x86 | bromolow | cedarview | avoton | braswell | broadwell)
+			unified_plat="x86 bromolow cedarview avoton braswell broadwell"
 			;;
 		# alpine and alpine4k use same define.
 		alpine | alpine4k )
@@ -101,7 +103,7 @@ plat_to_family() {
 	local family=
 
 	case "$plat" in
-		x86 | bromolow | cedarview | avoton | braswell )
+		x86 | bromolow | cedarview | avoton | braswell | broadwell)
 			family="x86_64"
 			;;
 		evansport )
@@ -117,7 +119,7 @@ plat_to_family() {
 			family="ppc"
 			;;
 		# armv7 not ready platforms.
-		comcerto2k | armada370 | armada375 | armadaxp | monaco | armada38x)
+		comcerto2k | armada370 | armada375 | armadaxp | monaco | armada38x | hi3535)
 			family="$plat"
 			;;
 		*)
@@ -203,7 +205,7 @@ pkg_get_spk_unified_platform() { # [path of env.mak (default: /env.mak)]
 		88f6281)
 			spk_unified_platform="88f628x"
 			;;
-		x86 | bromolow | cedarview | avoton | braswell )
+		x86 | bromolow | cedarview | avoton | braswell | broadwell)
 			spk_unified_platform="x64"
 			;;
 		alpine | alpine4k )
