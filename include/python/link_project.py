@@ -21,7 +21,10 @@ def link(source, dest, verbase=False):
         raise LinkProjectError("%s not exist." % source)
 
     print("Link %s -> %s" % (source, dest))
-    subprocess.check_call(['cp', '-al', source, dest])
+    if os.path.islink(source):
+        subprocess.check_call(['cp', '-aH', source, dest])
+    else:
+        subprocess.check_call(['cp', '-al', source, dest])
 
 
 def link_scripts(chroot):
