@@ -118,7 +118,7 @@ class ToolkitDownloader:
             if self._test_url_available(url):
                 self._download(url)
             else:
-                raise DownloadToolkitError("URL {} not exist. Please ask synology support for assistance.".format(url))
+                raise DownloadToolkitError("URL {} does not exist. Please ask synology support for assistance.".format(url))
 
 
 class ToolkitDeployer:
