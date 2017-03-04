@@ -1,7 +1,7 @@
 # Synology package toolkit framework
 
 ## Prepare Build Environment
-You can download and set up pre-built environments by using **EnvDeploy **as follows. Use -v to specify DSM version and -p to specify desired platform.
+You can download and set up pre-built environments by using **EnvDeploy** as follows. Use -v to specify DSM version and -p to specify desired platform.
 If -p is not given, all available platforms for given version will be set up.
 
 ```
@@ -31,14 +31,14 @@ You can use one of following commands to show available platforms. If -v is not 
 ```
 
 ### Update Environment
-Use EnvDeploy again to update your environments. For example, update x64 for DSM {{ book.ToolkitVersion }} by following command.
+Use EnvDeploy again to update your environments. For example, update x64 for DSM {{ book.ToolkitVersion }} by running the following command.
 ```
 ./EnvDeploy -v {version} -p x64
 ```
 
 ### Remove Environment
-Remove a building environment is very easy. First chroot to the building environment, umount the **/proc** folder and exit chroot. 
-After that, remove the building environment folder. The following command illustrate how to remove a building environment with version 5.2 and platform x64.
+Removing a building environment is very easy. First chroot to the building environment, umount the **/proc** folder and exit chroot.
+After that, remove the building environment folder. The following command illustrates how to remove a building environment with version 5.2 and platform x64.
 
 ```
 chroot /toolkit/build_env/ds.x64-{version} umount /proc
