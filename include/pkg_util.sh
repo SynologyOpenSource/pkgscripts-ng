@@ -61,7 +61,7 @@ pkg_get_platform() { # [path of env.mak (default: /env.mak)]
 			BROMOLOW)		arch="bromolow" ;;
 			CEDARVIEW)		arch="cedarview" ;;
 			AVOTON)			arch="avoton" ;;
-			BRASWELL)			arch="braswell" ;;
+			BRASWELL)		arch="braswell" ;;
 			MARVELL_ARMADAXP)	arch="armadaxp" ;;
 			MARVELL_ARMADA370)	arch="armada370" ;;
 			MARVELL_ARMADA375)	arch="armada375" ;;
@@ -72,6 +72,9 @@ pkg_get_platform() { # [path of env.mak (default: /env.mak)]
 			MARVELL_ARMADA38X)      arch="armada38x" ;;
 			HISILICON_HI3535)       arch="hi3535" ;;
 			BROADWELL)		arch="broadwell" ;;
+			KVMX64)			arch="kvmx64" ;;
+			GRANTLEY)		arch="grantley" ;;
+			DOCKERX64)		arch="dockerx64" ;;
 			*)			arch="" ;;
 		esac
 	fi
@@ -84,8 +87,8 @@ plat_to_unified_plat() {
 	local unified_plat=
 
 	case "$plat" in
-		x86 | bromolow | cedarview | avoton | braswell | broadwell)
-			unified_plat="x86 bromolow cedarview avoton braswell broadwell"
+		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley)
+			unified_plat="x86 bromolow cedarview avoton braswell broadwell dockerx64 kvmx64 grantley"
 			;;
 		# alpine and alpine4k use same define.
 		alpine | alpine4k )
@@ -103,7 +106,7 @@ plat_to_family() {
 	local family=
 
 	case "$plat" in
-		x86 | bromolow | cedarview | avoton | braswell | broadwell)
+		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley)
 			family="x86_64"
 			;;
 		evansport )
@@ -205,7 +208,7 @@ pkg_get_spk_unified_platform() { # [path of env.mak (default: /env.mak)]
 		88f6281)
 			spk_unified_platform="88f628x"
 			;;
-		x86 | bromolow | cedarview | avoton | braswell | broadwell)
+		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley)
 			spk_unified_platform="x64"
 			;;
 		alpine | alpine4k )

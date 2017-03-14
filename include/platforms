@@ -6,7 +6,7 @@ __INCLUDE_PLATFORMS__=defined
 
 Source "include/variable"
 
-AllPlatformOptionNames="6281 alpine alpine4k armada370 armada375 armada38x armadaxp avoton braswell broadwell bromolow cedarview comcerto2k evansport hi3535 monaco qoriq x64"
+AllPlatformOptionNames="6281 alpine alpine4k armada370 armada375 armada38x armadaxp avoton braswell broadwell bromolow cedarview comcerto2k evansport hi3535 monaco qoriq x64 dockerx64 grantley kvmx64"
 
 AllPlatforms="	bromolow	BROMOLOW			linux-3.10.x    	Intel Bromolow
 		6281		MARVELL_88F6281			linux-2.6.32    	Marvell 88F6281
@@ -26,6 +26,9 @@ AllPlatforms="	bromolow	BROMOLOW			linux-3.10.x    	Intel Bromolow
 		armada38x	MARVELL_ARMADA38X		linux-3.10.x-bsp	Marvell armada38x
 		hi3535		HISILICON_HI3535		linux-3.4.x		Hisilicon Hi3535
 		broadwell	BROADWELL			linux-3.10.x		Intel Broadwell
+		dockerx64	DOCKERX64			linux-3.10.x		Synology Docker X64
+		kvmx64		KVMX64				linux-3.10.x		Virtual Machine
+		grantley	GRANTLEY			linux-3.10.x		Intel Grantley
 		"
 
 #
@@ -36,7 +39,7 @@ AllPlatformOptions () {
 }
 
 Is64BitPlatform() {
-	local all64BitPlatforms="X64 BROMOLOW CEDARVIEW AVOTON BRASWELL BROADWELL"
+	local all64BitPlatforms="X64 BROMOLOW CEDARVIEW AVOTON BRASWELL BROADWELL DOCKERX64 KVMX64 GRANTLEY"
 	CheckInList $BUILD_TARGET $all64BitPlatforms && return 0 || return 1
 }
 
