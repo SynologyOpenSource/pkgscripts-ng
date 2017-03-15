@@ -355,22 +355,7 @@ GetBuildPhase() {
 }
 
 GetBuildStage() {
-	local version="$1"
-	local phase=$2
-
-	[ -z "$phase" ] && phase=$(GetBuildPhase $version)
-
-	case $phase in
-		"beta"|"release"|"hotfix")
-			echo release
-			;;
-		"dev"|"alpha"|"rc")
-			echo development
-			;;
-		*)
-			return 1
-			;;
-	esac
+	echo release
 	return 0
 }
 

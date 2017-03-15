@@ -1,0 +1,33 @@
+ToolChainDir32="/usr/local/arm-cortexa9-linux-gnueabi"
+ToolChainPrefix32="/usr/local/arm-cortexa9-linux-gnueabi/bin/arm-cortexa9-linux-gnueabi-"
+ToolChainBin32="${ToolChainDir32}/bin"
+ToolChainInclude32="${ToolChainDir32}/arm-cortexa9-linux-gnueabi/sysroot/usr/include"
+ToolChainLib32="${ToolChainDir32}/arm-cortexa9-linux-gnueabi/sysroot/lib"
+ToolChainSysRoot32="${ToolChainDir32}/arm-cortexa9-linux-gnueabi/sysroot"
+ARCH="arm"
+PLATFORM_FAMILY="SYNOPLAT_F_ARMV7"
+
+ConfigOpt32="--host=arm-cortexa9-linux-gnueabi --target=arm-cortexa9-linux-gnueabi --build=i686-pc-linux"
+
+# For sdk usbcam
+HOST32=armle-unknown-linux
+
+PLAT_FLAGS="-DSYNO_HISILICON_HI3535"
+CFLAGS32="-I${ToolChainInclude32} -D$PLATFORM_FAMILY -O2 -mfloat-abi=soft -mtune=cortex-a9 -mthumb"
+LDFLAGS32="-L${ToolChainLib32}"
+CC32=${ToolChainPrefix32}gcc
+CXX32=${ToolChainPrefix32}g++
+LD32=${ToolChainPrefix32}ld
+AR32=${ToolChainPrefix32}ar
+STRIP32=${ToolChainPrefix32}strip
+RANLIB32=${ToolChainPrefix32}ranlib
+NM32=${ToolChainPrefix32}nm
+READELF32=${ToolChainPrefix32}readelf
+
+KernelToolchain="gcc483_glibc219_hi3535"
+ToolchainTGZList="$KernelToolchain"
+UBootToolchain="gcc483_glibc219_hi3535"
+SynoKernelConfig="hi3535"
+SynoGNUSources="hi3535"
+
+BRINGUP_VERSION=5.2
