@@ -35,6 +35,12 @@ _ApplyEnvDir() {
 	SysRootInclude="${ToolChainSysRoot}/usr/include"
 	SysRootLib="${ToolChainSysRoot}/usr/lib"
 	SysRootBin="${ToolChainSysRoot}/usr/bin"
+	CROSS_COMPILE="$ToolChainPrefix"
+	KERNEL_SEARCH_PATH="$SysRootLib/modules/$PRODUCT-$DSM_SHLIB_MAJOR.$DSM_SHLIB_MINOR/build"
+	KSP="$KERNEL_SEARCH_PATH"
+	KSRC="$KERNEL_SEARCH_PATH"
+	KDIR="$KERNEL_SEARCH_PATH"
+
 }
 
 _ApplyBuildFlag() {

@@ -22,6 +22,7 @@ DebPkgDir="${DebDir}/result"
 GlobalDependConf="include/project.depends"
 
 DEFAULT_CCACHE_SIZE="3G"
+PRODUCT="DSM"
 
 fi # header guard
 # vim:ft=sh
