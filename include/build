@@ -382,6 +382,18 @@ SetupBuildProjEnv(){
 }
 
 
+ReplaceSynoSysRoot() {
+	local configFile=$@
+	for file in $configFile; do
+		if [ ! -f "$file" ]; then
+			ERROR "" "Replace sysroot fail! $file not exist."
+			return 1
+		fi
+		sed -i "s|@SYNO_SYSROOT@|${ToolChainSysRoot}|g" $file
+	done
+}
+
+
 RunBuildScript() # {{{
 {
 	local proj="$1"
