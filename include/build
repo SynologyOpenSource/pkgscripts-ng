@@ -346,35 +346,6 @@ EOF
 	fi
 }
 
-ActionsBeforeDebPack() {
-	# get SysRoot path
-	local sysRootPath=$ToolChainSysRoot
-
-	# move file to SysRoot
-	mkdir -p $DebDevBuild/$sysRootPath
-	mv $DebDevDir/* $DebDevBuild/$sysRootPath
-
-	# remove SysRoot path in pc file
-	PC_LIST=`find $DebDevBuild -name "*.pc"`
-	for pc in $PC_LIST; do
-		sed -i "s|${ToolChainSysRoot}||g" $pc
-	done
-
-	# remove all .la file
-	find $DebDevBuild -name '*.la' | xargs rm -rf
-}
-
-ReplaceSynoSysRoot() {
-	local configFile=$@
-	for file in $configFile; do
-		if [ ! -f "$file" ]; then
-			ERROR "" "Replace sysroot fail! $file not exist."
-			return 1
-		fi
-		sed -i "s|@SYNO_SYSROOT@|${ToolChainSysRoot}|g" $file
-	done
-}
-
 AssignMakeFlags() {
 	local proj="$1"
 
@@ -395,7 +366,6 @@ AssignMakeFlags() {
 
 SetupBuildProjEnv(){
 	local proj=$1
-	unset InstallDevScript
 	export BuildingProj=$proj
 	
 	if Is64BitProject "$proj"; then
@@ -448,15 +418,42 @@ RunBuildScript() # {{{
 	return
 } # }}}
 
-BuildProject() {
-	local ret=
-	local proj=$1
 
-	if ! RunBuildScript $proj; then
+PackProjectDeb() {
+	#TODO Use SynoDeb to install files instead of copy
+	if [ "$(ls -A "$DebDevDir" 2>/dev/null)" ]; then
+		# remove SysRoot path in pc file
+		for pc in $(find "$DebDevDir" -name "*.pc"); do
+			sed -i "s|${ToolChainSysRoot}||g" "$pc"
+		done
+
+		find "$DebDevDir" -name '*.la' | xargs rm -rf
+		cp -r "$DebDevDir"/* "$ToolChainSysRoot"
+	fi
+	CheckProjectStatus build $proj > /dev/null
+}
+
+
+BuildProject() {
+	local proj=$1
+	local installDevScript=
+
+	if ! RunBuildScript "$proj"; then
 		ERROR "Build project fail!"
 		return 1
 	fi
 
+	if ! installDevScript=$(findInstallDevScript "$proj"); then
+		INFO "install-dev scripts not found!"
+		return 0
+	fi
+
+	INFO "======= Run install-dev script ======="
+	INFO "SCRIPT" "install-dev script: ${installDevScript}"
+	(
+		. "$installDevScript"
+	)
+	PackProjectDeb "$proj"
 	return $?
 }
 
