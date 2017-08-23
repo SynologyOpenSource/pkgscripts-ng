@@ -59,6 +59,9 @@ pkg_get_platform() { # [path of env.mak (default: /env.mak)]
 			PPC_QORIQ)		arch="qoriq" ;;
 			X64)			arch="x86" ;;
 			BROMOLOW)		arch="bromolow" ;;
+			DENVERTON)		arch="denverton" ;;
+			REALTEK_RTD1296)        arch="rtd1296" ;;
+			APOLLOLAKE)		arch="apollolake" ;;
 			CEDARVIEW)		arch="cedarview" ;;
 			AVOTON)			arch="avoton" ;;
 			BRASWELL)		arch="braswell" ;;
@@ -87,8 +90,8 @@ plat_to_unified_plat() {
 	local unified_plat=
 
 	case "$plat" in
-		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley)
-			unified_plat="x86 bromolow cedarview avoton braswell broadwell dockerx64 kvmx64 grantley"
+		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley | denverton | apollolake)
+			unified_plat="x86 bromolow cedarview avoton braswell broadwell dockerx64 kvmx64 grantley denverton apollolake"
 			;;
 		# alpine and alpine4k use same define.
 		alpine | alpine4k )
@@ -106,7 +109,7 @@ plat_to_family() {
 	local family=
 
 	case "$plat" in
-		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley)
+		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley | denverton | apollolake)
 			family="x86_64"
 			;;
 		evansport )
@@ -120,6 +123,9 @@ plat_to_family() {
 			;;
 		qoriq )
 			family="ppc"
+			;;
+		rtd1296 )
+			family="armv8"
 			;;
 		# armv7 not ready platforms.
 		comcerto2k | armada370 | armada375 | armadaxp | monaco | armada38x | hi3535)
@@ -208,7 +214,7 @@ pkg_get_spk_unified_platform() { # [path of env.mak (default: /env.mak)]
 		88f6281)
 			spk_unified_platform="88f628x"
 			;;
-		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley)
+		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley | denverton | apollolake)
 			spk_unified_platform="x64"
 			;;
 		alpine | alpine4k )

@@ -6,7 +6,7 @@ __INCLUDE_PLATFORMS__=defined
 
 Source "include/variable"
 
-AllPlatformOptionNames="6281 alpine alpine4k armada370 armada375 armada38x armadaxp avoton braswell broadwell bromolow cedarview comcerto2k evansport hi3535 monaco qoriq x64 dockerx64 grantley kvmx64"
+AllPlatformOptionNames="6281 alpine alpine4k armada370 armada375 armada38x armadaxp avoton braswell broadwell bromolow cedarview comcerto2k evansport hi3535 monaco qoriq x64 dockerx64 grantley kvmx64 rtd1296 apollolake denverton"
 
 AllPlatforms="	bromolow	BROMOLOW			linux-3.10.x    	Intel Bromolow
 		6281		MARVELL_88F6281			linux-2.6.32    	Marvell 88F6281
@@ -29,6 +29,9 @@ AllPlatforms="	bromolow	BROMOLOW			linux-3.10.x    	Intel Bromolow
 		dockerx64	DOCKERX64			linux-3.10.x		Synology Docker X64
 		kvmx64		KVMX64				linux-3.10.x		Virtual Machine
 		grantley	GRANTLEY			linux-3.10.x		Intel Grantley
+		apollolake	APOLLOLAKE			linux-4.4.x		Intel Apollo Lake
+		rtd1296		REALTEK_RTD1296			linux-4.4.x		Realtek rtd1296
+		denverton	DENVERTON			linux-4.4.x		Intel Denverton
 		"
 
 #
