@@ -6,7 +6,7 @@ __INCLUDE_PLATFORMS__=defined
 
 Source "include/variable"
 
-AllPlatformOptionNames="6281 alpine alpine4k armada370 armada375 armada38x armadaxp avoton braswell broadwell bromolow cedarview comcerto2k evansport hi3535 monaco qoriq x64 dockerx64 grantley kvmx64 rtd1296 apollolake denverton"
+AllPlatformOptionNames="6281 alpine alpine4k armada370 armada375 armada38x armadaxp avoton braswell broadwell bromolow cedarview comcerto2k evansport hi3535 monaco qoriq x64 dockerx64 grantley kvmx64 rtd1296 apollolake denverton armada37xx broadwellnk"
 
 AllPlatforms="	bromolow	BROMOLOW			linux-3.10.x    	Intel Bromolow
 		6281		MARVELL_88F6281			linux-2.6.32    	Marvell 88F6281
@@ -32,6 +32,8 @@ AllPlatforms="	bromolow	BROMOLOW			linux-3.10.x    	Intel Bromolow
 		apollolake	APOLLOLAKE			linux-4.4.x		Intel Apollo Lake
 		rtd1296		REALTEK_RTD1296			linux-4.4.x		Realtek rtd1296
 		denverton	DENVERTON			linux-4.4.x		Intel Denverton
+		armada37xx	MARVELL_ARMADA37XX		linux-4.4.x		Marvell armada37xx
+		broadwellnk	BROADWELLNK			linux-4.4.x		Intel Broadwell with new kernel
 		"
 
 #
@@ -42,7 +44,7 @@ AllPlatformOptions () {
 }
 
 Is64BitPlatform() {
-	local all64BitPlatforms="X64 BROMOLOW CEDARVIEW AVOTON BRASWELL BROADWELL DOCKERX64 KVMX64 GRANTLEY DENVERTON REALTEK_RTD1296 APOLLOLAKE"
+	local all64BitPlatforms="X64 BROMOLOW CEDARVIEW AVOTON BRASWELL BROADWELL DOCKERX64 KVMX64 GRANTLEY DENVERTON REALTEK_RTD1296 APOLLOLAKE BROADWELLNK"
 	CheckInList $BUILD_TARGET $all64BitPlatforms && return 0 || return 1
 }
 

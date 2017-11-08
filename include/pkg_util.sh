@@ -59,6 +59,7 @@ pkg_get_platform() { # [path of env.mak (default: /env.mak)]
 			PPC_QORIQ)		arch="qoriq" ;;
 			X64)			arch="x86" ;;
 			BROMOLOW)		arch="bromolow" ;;
+			BROADWELLNK)		arch="broadwellnk" ;;
 			DENVERTON)		arch="denverton" ;;
 			REALTEK_RTD1296)        arch="rtd1296" ;;
 			APOLLOLAKE)		arch="apollolake" ;;
@@ -73,6 +74,7 @@ pkg_get_platform() { # [path of env.mak (default: /env.mak)]
 			ALPINE)			arch="alpine" ;;
 			STM_MONACO)             arch="monaco" ;;
 			MARVELL_ARMADA38X)      arch="armada38x" ;;
+			MARVELL_ARMADA37XX)     arch="armada37xx" ;;
 			HISILICON_HI3535)       arch="hi3535" ;;
 			BROADWELL)		arch="broadwell" ;;
 			KVMX64)			arch="kvmx64" ;;
@@ -90,8 +92,8 @@ plat_to_unified_plat() {
 	local unified_plat=
 
 	case "$plat" in
-		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley | denverton | apollolake)
-			unified_plat="x86 bromolow cedarview avoton braswell broadwell dockerx64 kvmx64 grantley denverton apollolake"
+		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley | denverton | apollolake | broadwellnk)
+			unified_plat="x86 bromolow cedarview avoton braswell broadwell dockerx64 kvmx64 grantley denverton apollolake broadwellnk"
 			;;
 		# alpine and alpine4k use same define.
 		alpine | alpine4k )
@@ -109,7 +111,7 @@ plat_to_family() {
 	local family=
 
 	case "$plat" in
-		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley | denverton | apollolake)
+		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley | denverton | apollolake | broadwellnk)
 			family="x86_64"
 			;;
 		evansport )
@@ -124,7 +126,7 @@ plat_to_family() {
 		qoriq )
 			family="ppc"
 			;;
-		rtd1296 )
+		rtd1296 | armada37xx)
 			family="armv8"
 			;;
 		# armv7 not ready platforms.
@@ -214,7 +216,7 @@ pkg_get_spk_unified_platform() { # [path of env.mak (default: /env.mak)]
 		88f6281)
 			spk_unified_platform="88f628x"
 			;;
-		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley | denverton | apollolake)
+		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley | denverton | apollolake | broadwellnk)
 			spk_unified_platform="x64"
 			;;
 		alpine | alpine4k )
