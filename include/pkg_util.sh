@@ -233,7 +233,8 @@ pkg_dump_info() {
 		startable helpurl report_url support_center install_reboot install_dep_packages install_conflict_packages install_dep_services
 		instuninst_restart_services startstop_restart_services start_dep_services silent_install silent_upgrade silent_uninstall install_type
 		checksum package_icon package_icon_120 package_icon_128 package_icon_144 package_icon_256 thirdparty support_conf_folder log_collector
-		support_aaprofile auto_upgrade_from offline_install precheckstartstop"
+		support_aaprofile auto_upgrade_from offline_install precheckstartstop description displayname"
+	local langs="enu cht chs krn ger fre ita spn jpn dan nor sve nld rus plk ptb ptg hun trk csy"
 	local f= lan= file= sec= key=
 
 	for f in $fields; do
@@ -242,39 +243,16 @@ pkg_dump_info() {
 		fi
 	done
 
-	if [ -e "$UISTRING_PATH" -a "$description_sec" -a "$description_key" ]; then
-		sec=$description_sec
-		key=$description_key
-		for lan in $UISTRING_PATH/*; do
-			lan=$(basename "$lan")
-			file="$UISTRING_PATH/$lan/strings"
-			if [ -r "$file" ]; then
-				echo description_$lan=\"$(pkg_get_string "$file" "$sec" "$key")\"
-				if [ "x$lan" = "xenu" ]; then
-					echo description=\"$(pkg_get_string "$file" "$sec" "$key")\"
-				fi
-			fi
-		done
-	elif [ "x" != "x$description" ]; then
-		echo "description=\"${description}\""
-	fi
-
-	if [ -e "$UISTRING_PATH" -a "$displayname_sec" -a "$displayname_key" ]; then
-		sec=$displayname_sec
-		key=$displayname_key
-		for lan in $UISTRING_PATH/*; do
-			lan=$(basename "$lan")
-			file="$UISTRING_PATH/$lan/strings"
-			if [ -r "$file" ]; then
-				echo displayname_$lan=\"$(pkg_get_string "$file" "$sec" "$key")\"
-				if [ "x$lan" = "xenu" ]; then
-					echo displayname=\"$(pkg_get_string "$file" "$sec" "$key")\"
-				fi
-			fi
-		done
-	elif [ "x" != "x$displayname" ]; then
-		echo "displayname=\"${displayname}\""
-	fi
+	for lang in $langs; do
+		description="description_${lang}"
+		if [ -n "${!description}" ]; then
+			echo "${description}=\"${!description}\""
+		fi
+		displayname="displayname_${lang}"
+		if [ -n "${!displayname}" ]; then
+			echo "${displayname}=\"${!displayname}\""
+		fi
+	done
 }
 
 pkg_get_tar_option() {
