@@ -230,10 +230,14 @@ pkg_get_spk_unified_platform() { # [path of env.mak (default: /env.mak)]
 pkg_dump_info() {
 	local fields="package version maintainer maintainer_url distributor distributor_url arch exclude_arch model
 		adminprotocol adminurl adminport firmware dsmuidir dsmappname checkport allow_altport
-		startable helpurl report_url support_center install_reboot install_dep_packages install_conflict_packages install_dep_services
-		instuninst_restart_services startstop_restart_services start_dep_services silent_install silent_upgrade silent_uninstall install_type
-		checksum package_icon package_icon_120 package_icon_128 package_icon_144 package_icon_256 thirdparty support_conf_folder log_collector
-		support_aaprofile auto_upgrade_from offline_install precheckstartstop description displayname"
+		startable helpurl report_url support_center
+		install_reboot install_dep_packages install_conflict_packages install_dep_services
+		install_break_packages instuninst_restart_services install_type install_replace_packages
+		startstop_restart_services start_dep_services silent_install silent_upgrade silent_uninstall
+		checksum package_icon package_icon_120 package_icon_128 package_icon_144 package_icon_256
+		thirdparty support_conf_folder log_collector
+		support_aaprofile auto_upgrade_from offline_install precheckstartstop description displayname
+		beta ctl_stop ctl_uninstall os_max_ver os_min_ver"
 	local langs="enu cht chs krn ger fre ita spn jpn dan nor sve nld rus plk ptb ptg hun trk csy"
 	local f= lan= file= sec= key=
 
