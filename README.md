@@ -6,19 +6,19 @@ If -p is not given, all available platforms for given version will be set up.
 
 ```
 cd /toolkit/pkgscripts
-./EnvDeploy -v 6.0 -p x64 # for example
+./EnvDeploy -v 6.1 -p x64 # for example
 ```
 
 Finally, the whole working directory will look like the following figure,
-and **ds.${platform}-${version}** is the chroot environment to build your own projects.
+and **ds.x64-6.1** is the chroot environment to build your own projects.
 
 ```
 toolkit/
 ├── pkgscripts/
 └── build_env/
-    ├── ds.${platform}-${version}/
+    ├── ds.x64-6.1/
     ├── ...
-    └── ds.${platform}-${version}/
+    └── ds.x64-6.1/
 
 ```
 
@@ -26,14 +26,14 @@ toolkit/
 You can use one of following commands to show available platforms. If -v is not given, available platforms for all versions are listed.
 
 ```
-./EnvDeploy -v {version} --list
-./EnvDeploy -v {version} --info platform
+./EnvDeploy -v 6.1 --list
+./EnvDeploy -v 6.1 --info platform
 ```
 
 ### Update Environment
 Use EnvDeploy again to update your environments. For example, update x64 for DSM {{ book.ToolkitVersion }} by running the following command.
 ```
-./EnvDeploy -v {version} -p x64
+./EnvDeploy -v 6.1 -p x64
 ```
 
 ### Remove Environment
@@ -41,6 +41,6 @@ Removing a building environment is very easy. First chroot to the building envir
 After that, remove the building environment folder. The following command illustrates how to remove a building environment with version 5.2 and platform x64.
 
 ```
-chroot /toolkit/build_env/ds.x64-{version} umount /proc
-rm -rf /toolkit/build_env/ds.x64-{version}
+chroot /toolkit/build_env/ds.x64-6.1 umount /proc
+rm -rf /toolkit/build_env/ds.x64-6.1
 ```
