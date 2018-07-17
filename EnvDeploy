@@ -221,8 +221,15 @@ class ToolkitDeployer:
         mkdir_source(chroot)
         link_python(chroot)
         copy_user_env_config(chroot)
-        if not os.path.islink(os.path.join(chroot, 'pkgscripts')):
-            os.symlink('pkgscripts-ng', os.path.join(chroot, 'pkgscripts'))
+        src = os.path.basename(os.path.dirname(os.path.abspath(__file__)))
+        if src == 'pkgscripts':
+            dst = os.path.join(chroot, 'pkgscripts-ng')
+        elif src == 'pkgscripts-ng':
+            dst = os.path.join(chroot, 'pkgscripts')
+        else:
+            raise RuntimeError("Script directory should be pkgscripts or pkgscripts-ng.")
+        if not os.path.islink(dst):
+            os.symlink(src, dst)
 
     def deploy(self):
         doPlatformParallel(self.setup_chroot, self.platforms)
