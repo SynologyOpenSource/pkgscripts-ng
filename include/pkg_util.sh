@@ -74,6 +74,7 @@ pkg_get_platform() { # [path of env.mak (default: /env.mak)]
 			ALPINE)			arch="alpine" ;;
 			STM_MONACO)             arch="monaco" ;;
 			MARVELL_ARMADA38X)      arch="armada38x" ;;
+			MARVELL_ARMADA37XX)     arch="armada37xx" ;;
 			HISILICON_HI3535)       arch="hi3535" ;;
 			BROADWELL)		arch="broadwell" ;;
 			KVMX64)			arch="kvmx64" ;;
@@ -125,7 +126,7 @@ plat_to_family() {
 		qoriq )
 			family="ppc"
 			;;
-		rtd1296)
+		rtd1296 | armada37xx)
 			family="armv8"
 			;;
 		# armv7 not ready platforms.
