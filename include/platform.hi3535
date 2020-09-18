@@ -29,5 +29,6 @@ ToolchainTGZList="$KernelToolchain"
 UBootToolchain="gcc483_glibc219_hi3535"
 SynoKernelConfig="hi3535"
 SynoGNUSources="hi3535"
+QemuStatic="qemu-arm-static"
 
 BRINGUP_VERSION=5.2

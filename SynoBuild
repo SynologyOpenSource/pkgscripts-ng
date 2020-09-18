@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (c) 2000-2016 Synology Inc. All rights reserved.
+# Copyright (c) 2000-2020 Synology Inc. All rights reserved.
 
 LANG=""
 LC_ALL=""
@@ -22,9 +22,11 @@ Options
 	-C, --cleanonly
 		Cleanup only and exit.
 	-j, --jobs {num}
-		Specify how many jobs to build in parallel. Default is 4.
+		Specify how many jobs to build in parallel. Default is numb of CPUs.
 	-J	Disable parallel build.
 	-S	Disable silent make.
+	--parallel {N}
+		parallel build projects with N parallel job.
 	-x {level}
 		Build all dependant projects. Can specify level of dependency.
 		Expand project dependency list, and build them in turn.
@@ -50,98 +52,126 @@ Options
 EOF
 }
 
+GetBaseSDKVersion() {
+	local bringupMajor=
+	local bringupMinor=
+
+	if [ -n "$BRINGUP_VERSION" ]; then
+		bringupMajor=$(echo $BRINGUP_VERSION | cut -d. -f1)
+		bringupMinor=$(echo $BRINGUP_VERSION | cut -d. -f2)
+		if [ -n "$bringupMajor" -a -n "$bringupMinor" -a "$bringupMajor" = "$DSM_SHLIB_MAJOR" ]; then
+			echo "$BRINGUP_VERSION"
+		fi
+	fi
+
+	echo "$DSM_SHLIB_MAJOR.0"
+}
 
 AppendSynoXtraCflags(){
+	local baseSDKVersion=$(GetBaseSDKVersion)
 	SYNO_XTRACFLAGS="-g"
-}
-
-ParseExtArgs() {
-	while [ -n "$1" ]; do # {{{
-		case "$1" in
-		"--no-builtin")
-			IgnoreBuiltin="No"
-			;;
-		"--dont-remove-deb")
-			DontRemoveDeb="Y"
-			;;
-		"--min-sdk")
-			MinSdkVersion="$2"
-			shift
-			;;
-		"--enable-apt")
-			ENABLE_APT="yes"
-			;;
-		*)
-			ERROR "Unknown option: $1"
-			;;
-		esac
-		shift
-	done
-	if [ -z "$BUILD_OPT" ]; then
-		# call again without parameters
-		# to prompt user interactively
-		AskPlatform
-	fi
-}
-
-CollectBuiltinProjs(){
-	local builtinProjs=
-	# Resolve built-in projects
-
-	if [ "$IgnoreBuiltin" = "Yes" -a -f "$ExcludeListFile" ]; then
-		ForceBuildProjects="`cat $ExcludeListFile | sed 's/ /|/g'`"
-		builtinProjs="`echo "$BuiltinProjects" | sed 's/ /\n/g' | grep -vE "$ForceBuildProjects"`"
-	fi
-	echo "$builtinProjs"
+	SYNO_XTRACFLAGS="$SYNO_XTRACFLAGS -D`ResolveMinSdkMacro ${MinSdkVersion:-$baseSDKVersion}`"
 }
 
 Source "include/config"
 Source "include/build"
 
-IgnoreBuiltin="Yes"
-MakeClean="Yes"
-ExcludeListFile="/seen_curr.list"
-ARGS=`getopt -u -l "$BuildDefaultLongArgs,dont-remove-deb,min-sdk:,no-builtin,enable-apt" $BuildDefaultArgs $@`
+DoBuild() {
+	local ThisProj=$1
+	local logFile="$LogDir/${ThisProj}.build"
+	[ -f "$logFile" ] && mv -f $logFile $logFile.old
 
-if [ $? -ne 0 ]; then
-	Usage
-	exit 1
-fi
-set -- $ARGS
+	(
+		INFO "Start to build ${ThisProj}."
+		Date0=`date +%s`
+		SetupBuildProjEnv $ThisProj
+		BuildProject $ThisProj
+		Date1=`date +%s`
+		ShowTimeCost $Date0 $Date1 "Build-->$ThisProj"
+		INFO "Build ${ThisProj} finished!"
 
-CheckPermission
+	) &> >(tee $logFile)
+}
+
+ParallelBuildProjects() {
+	local projects=$@
+	local pickle="/tmp/$$.pickle"
+	local buildProjs failedProjs successProjs blockedList logFile blockedProjs
+
+	if [ -z "$projects" ]; then
+		echo "No projects input."
+		return 0
+	fi
+
+	echo "${ScriptsDir}/ProjectDepends.py --dump $pickle ${DEP_OPT} ${BUILD_DEP_LEVEL} -p ${PLATFORM_ABBR} $projects"
+	${ScriptsDir}/ProjectDepends.py --dump $pickle ${DEP_OPT} ${BUILD_DEP_LEVEL} -p "${PLATFORM_ABBR}" $projects
+	echo "${ScriptsDir}/ParallelProjects.py --init $pickle ${DEP_OPT} $projects"
+	${ScriptsDir}/ParallelProjects.py --init $pickle ${DEP_OPT} $projects
+
+	while true; do
+		buildProjs=$(${ScriptsDir}/ParallelProjects.py --next -c "$ProcessCount" $successProjs)
+		if [ "NULL" = "$buildProjs" ]; then
+			echo "Done."
+			break
+		fi
+
+		for ThisProj in $buildProjs; do
+			DoBuild $ThisProj >/dev/null &
+			echo "[Building] $ThisProj"
+		done
+		wait
+
+		successProjs=
+		failedProjs=
+		for proj in $buildProjs; do
+			if CheckProjectStatus build $proj > /dev/null; then
+				successProjs="$successProjs $proj"
+				echo "[Success] $proj"
+			else
+				failedProjs="$failedProjs $proj"
+				echo "[Failed] $proj"
+			fi
+		done
+
+		if [ -n "$failedProjs" ]; then
+			blockedList=$(${ScriptsDir}/ParallelProjects.py --failed $failedProjs)
+			for block in $blockedList; do
+				proj=$(echo $block | cut -d: -f1)
+				blockedProjs=$(echo $block | cut -d: -f2 | sed 's/,/ /g')
+				for blockProj in $blockedProjs; do
+					logFile="$LogDir/${blockProj}.build"
+					[ -f "$logFile" ] && mv -f $logFile ${logFile}.old
+					echo "[Blocked] $blockProj is blocked due to $proj build failed." | tee $logFile
+				done
+			done
+		fi
+	done
+
+	${ScriptsDir}/ParallelProjects.py --purge
+	rm $pickle
+}
 
 main() {
 	local projectList=
 	local logFile=
-	local builtinProjs=
 
-	ParseBuildDefaultArgs "$@"
-	ParseExtArgs $UnHandledOpt
+	CheckPermission
+	ParseArgs "$@"
 
 	# Setup build environment
 	SetupBuildEnv AppendSynoXtraCflags
 
-	projectList=$(NormalizeBuildProjects $InputProjs)
-	INFO "" "projectList=\"$projectList\""
-	builtinProjs=$(CollectBuiltinProjs)
+	projectList=$(GetBuildProjList)
 
-	for ThisProj in $projectList; do
-		logFile="$LogDir/${ThisProj}.build"
-		[ -f "$logFile" ] && mv -f $logFile $logFile.old
+	INFO "projectList=\"$projectList\""
 
-		(
-			INFO "Start to build ${ThisProj}."
-			Date0=`date +%s`
-			SetupBuildProjEnv $ThisProj
-			BuildProject $ThisProj
-			Date1=`date +%s`
-			ShowTimeCost $Date0 $Date1 "Build-->$ThisProj"
-			INFO "Build ${ThisProj} finished!"
-
-		) &> >(tee $logFile)
-
-	done
+	if $Parallel && [ "$(wc -w <<< "$projectList")" -gt 1 ]; then
+		ParallelBuildProjects ${projectList}
+	else
+		for ThisProj in $projectList; do
+			DoBuild "$ThisProj"
+		done
+	fi
 
 	CheckTimeCostLog build $projectList
 	if ! CheckErrorLog build $projectList; then
@@ -150,4 +180,4 @@ main() {
 	return 0
 }
 
-main $@
+main "$@"

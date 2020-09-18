@@ -1,339 +1,82 @@
 #!/usr/bin/env python3
-# Copyright (c) 2000-2016 Synology Inc. All rights reserved.
+# Copyright (c) 2000-2020 Synology Inc. All rights reserved.
 
 import argparse
-import urllib.request
 import sys
 import os
 import subprocess
-import glob
-import shutil
+import logging
 
 sys.path.append(os.path.realpath(os.path.dirname(__file__)) + "/include/python")
 import BuildEnv
-from parallel import doPlatformParallel
-from cache import cache
-from chroot import Chroot
-from tee import Tee
-from toolkit import TarballManager
+from pkgdeploy import (EnvDeployError, filter_platforms,
+                       ChrootToolkit, DownloadDir, set_log)
 
-log_file = os.path.join(BuildEnv.SynoBase, 'envdeploy.log')
-sys.stdout = Tee(sys.stdout, log_file)
-sys.stderr = Tee(sys.stderr, log_file, move=False)
-
-VersionMap = 'version_map'
-DownloadDir = os.path.join(BuildEnv.SynoBase, 'toolkit_tarballs')
-ToolkitServer = 'https://sourceforge.net/projects/dsgpl/files/toolkit'
-Product = "DSM"
-
-
-@cache
-def split_version(version):
-    if '-' in version:
-        return version.split('-')
-    else:
-        return version, None
-
-
-class EnvDeployError(RuntimeError):
-    pass
-
-
-class TarballNotFoundError(EnvDeployError):
-    pass
-
-
-class PlatformNotAvailableError(EnvDeployError):
-    pass
-
-
-class DownloadToolkitError(EnvDeployError):
-    pass
-
-
-class ToolkitDownloader:
-    def __init__(self, version, platforms, tarball_manager, quiet):
-        self._download_list = []
-        self.version, self.build_num = split_version(version)
-        self.platforms = platforms
-        self.tarball_manager = tarball_manager
-        self.quiet = quiet
-
-        self.append_base_tarball()
-        self.append_env_tarball()
-        self.append_dev_tarball()
-
-        if not os.path.isdir(DownloadDir):
-            os.makedirs(DownloadDir)
-
-    def _join_download_url(self, *patterns):
-        url = ToolkitServer
-        for pattern in list(patterns):
-            if not pattern:
-                continue
-            url += '/%s' % pattern
-        return url
-
-    def _download(self, url):
-        print("Download... " + url)
-        if self.quiet:
-            reporthook = None
-        else:
-            reporthook = self.dl_progress
-
-        try:
-            dest = os.path.join(DownloadDir, url.split("/")[-1])
-            urllib.request.urlretrieve(url, dest, reporthook=reporthook)
-            print("Download destination: " + dest)
-        except urllib.error.HTTPError:
-            raise DownloadToolkitError("Failed to download toolkit: " + url)
-
-    def dl_progress(self, count, dl_size, total_size):
-        percent = int(count * dl_size * 50 / total_size)
-        sys.stdout.write("[%-50s] %d%%" % ('=' * (percent-1) + ">", 2 * percent))
-        sys.stdout.flush()
-        sys.stdout.write("\b" * 102)
-
-    def _test_url_available(self, url):
-        try:
-            return int(urllib.request.urlopen(url).getcode()) == 200
-        except urllib.error.HTTPError:
-            return False
-
-    def append_base_tarball(self):
-        self._download_list.append(self._join_download_url(Product + self.version, self.tarball_manager.base_tarball_name))
-
-    def append_env_tarball(self):
-        self.append_platform_tarball_list(self.tarball_manager.get_env_tarball_name)
-
-    def append_dev_tarball(self):
-        self.append_platform_tarball_list(self.tarball_manager.get_dev_tarball_name)
-
-    def append_platform_tarball_list(self, get_tarball_name):
-        for platform in self.platforms:
-            self._download_list.append(self._join_download_url(Product + self.version, get_tarball_name(platform)))
-
-    def download_toolkit(self):
-        for url in self._download_list:
-            if self._test_url_available(url):
-                self._download(url)
-            else:
-                raise DownloadToolkitError("URL {} does not exist. Please ask synology support for assistance.".format(url))
-
-
-class ToolkitDeployer:
-    def __init__(self, args, platforms, tarball_manager):
-        self.clear = args.clear
-        self.version, self.build_num = split_version(args.version)
-        self.platforms = platforms
-        self.suffix = args.suffix
-        self.tarball_manager = tarball_manager
-
-    @property
-    def has_pixz(self):
-        try:
-            with open(os.devnull, 'rb') as null:
-                subprocess.check_call(['which', 'pixz'], stdout=null, stderr=null)
-        except subprocess.CalledProcessError:
-            return False
-        return True
-
-    def __extract__(self, tarball, dest_dir):
-        cmd = ['tar']
-        if self.has_pixz:
-            cmd.append('-Ipixz')
-        cmd += ['-xhf', tarball, '-C', dest_dir]
-        print(" ".join(cmd))
-        subprocess.check_call(cmd)
-
-    def deploy_base_env(self, platform):
-        base_tarball = self.tarball_manager.base_tarball_path
-        self.__extract__(base_tarball, BuildEnv.getChrootSynoBase(platform, self.version, self.suffix))
-
-    def deploy_env(self, platform):
-        self.__extract__(self.tarball_manager.get_env_tarball_path(platform),
-                         BuildEnv.getChrootSynoBase(platform, self.version, self.suffix))
-
-    # clear and mkdir chroot
-    def setup_chroot(self, platform):
-        chroot = BuildEnv.getChrootSynoBase(platform, self.version, self.suffix)
-        if not os.path.isdir(chroot):
-            os.makedirs(chroot)
-            return
-
-        if not self.clear:
-            return
-
-        print("Clear %s..." % chroot)
-        try:
-            with open(os.devnull, 'wb') as null:
-                subprocess.check_call(['umount', os.path.join(chroot, 'proc')], stderr=null)
-        except subprocess.CalledProcessError:
-            pass
-
-        for f in os.listdir(chroot):
-            if 'ccaches' in f:
-                continue
-            file_path = os.path.join(chroot, f)
-            subprocess.check_call(['rm', '-rf', file_path])
-
-    def __install_debs__(self, chroot):
-        with Chroot(chroot) as chroot:
-            deb_list = glob.glob('*.deb')
-            if not deb_list:
-                return
-
-            for deb in deb_list:
-                subprocess.check_call(['dpkg', '-i', chroot.get_inside_path(deb)])
-                os.remove(deb)
-
-    def deploy_dev(self, platform):
-        chroot = BuildEnv.getChrootSynoBase(platform, self.version, self.suffix)
-        self.__extract__(self.tarball_manager.get_dev_tarball_path(platform), chroot)
-        self.__install_debs__(chroot)
-
-    def adjust_chroot(self, platform):
-        def mkdir_source(chroot):
-            source_dir = os.path.join(chroot, 'source')
-            if not os.path.isdir(source_dir):
-                os.makedirs(source_dir)
-
-        def link_python(chroot):
-            python2_x = glob.glob(os.path.join(chroot, 'usr', 'bin', 'python2.[0-9]'))[0]
-            python = os.path.join(chroot, 'usr', 'bin', 'python')
-            if os.path.exists(python):
-                os.remove(python)
-            os.symlink(os.path.basename(python2_x), python)
-
-        def copy_user_env_config(chroot):
-            configs = ['/etc/hosts', '/root/.gitconfig', '/root/.ssh', '/etc/resolv.conf']
-
-            for config in configs:
-                dest = chroot + config
-                if os.path.isdir(config):
-                    if os.path.isdir(dest):
-                        shutil.rmtree(dest)
-                    shutil.copytree(config, dest)
-                elif os.path.isfile(config):
-                    shutil.copy(config, dest)
-
-        chroot = BuildEnv.getChrootSynoBase(platform, self.version, self.suffix)
-        mkdir_source(chroot)
-        link_python(chroot)
-        copy_user_env_config(chroot)
-        src = os.path.basename(os.path.dirname(os.path.abspath(__file__)))
-        if src == 'pkgscripts':
-            dst = os.path.join(chroot, 'pkgscripts-ng')
-        elif src == 'pkgscripts-ng':
-            dst = os.path.join(chroot, 'pkgscripts')
-        else:
-            raise RuntimeError("Script directory should be pkgscripts or pkgscripts-ng.")
-        if not os.path.islink(dst):
-            os.symlink(src, dst)
-
-    def deploy(self):
-        doPlatformParallel(self.setup_chroot, self.platforms)
-        doPlatformParallel(self.deploy_base_env, self.platforms)
-        doPlatformParallel(self.deploy_env, self.platforms)
-        doPlatformParallel(self.deploy_dev, self.platforms)
-        doPlatformParallel(self.adjust_chroot, self.platforms)
-
-
-def check_tarball_exists(build_num, platforms, tarball_manager):
-    files = []
-    files.append(tarball_manager.base_tarball_path)
-
-    for platform in platforms:
-        files.append(tarball_manager.get_dev_tarball_path(platform))
-        files.append(tarball_manager.get_env_tarball_path(platform))
-
-    for f in files:
-        if not os.path.isfile(f):
-            raise TarballNotFoundError("Needed file not found! " + f)
-
-
-def get_all_platforms(dsm_ver, build_num):
-    pattern = 'AvailablePlatform_%s_%s' % (dsm_ver.split('.')[0], dsm_ver.split('.')[1])
-
-    # -v 6.0-8405
-    if build_num:
-        try:
-            cmd = ['git', '-C', os.path.dirname(__file__), 'show', 'origin/%sPKGDEV:include/toolkit.config' % build_num]
-            config = subprocess.check_output(cmd).decode().split('\n')
-        except subprocess.CalledProcessError:
-            raise PlatformNotAvailableError("Please check `%sPKGDEV' branch exist!" % build_num)
-
-        for line in config:
-            if pattern in line:
-                platforms = line.split('=')[1].strip('"').split()
-    # -v 6.0
-    else:
-        platforms = BuildEnv.getIncludeVariable('toolkit.config', pattern).split()
-
-    return platforms
-
-
-def get_platforms(dsm_ver, build_num, platforms):
-    all_platforms = get_all_platforms(dsm_ver, build_num)
-
-    if not platforms:
-        return all_platforms
-
-    redundant_platforms = set(platforms) - set(all_platforms)
-    if redundant_platforms:
-        raise PlatformNotAvailableError("[%s] is not available platform." % " ".join(redundant_platforms))
-
-    return platforms
+set_log('envdeploy.log')
 
 
 def parse_args(argv):
     argparser = argparse.ArgumentParser()
     argparser.add_argument('-v', '--version', dest='version',
-                           help='Deploy toolkit version (6.0 or 6.0-9527), default is latest version')
-    argparser.add_argument('-c', '--clear', action='store_true', default=False,
-                           help='Clear chroot before deploy')
-    argparser.add_argument('-t', '--tarball', dest='local_tarball', default=None, help='Use local tarball dir')
-    argparser.add_argument('-s', '--suffix', help='Assign build_env suffix, ex build_env-demo')
-    argparser.add_argument('-q', '--quiet', action='store_true', help="Don't display download status bar")
-    argparser.add_argument('-l', '--list', action="store_true", default=False, help='List available platforms')
-    argparser.add_argument('-p', dest='platforms', default="", help='Deploy platforms')
+                           help='Deploy toolkit version (e.g., 6.2), default is latest version.')
+    argparser.add_argument('-C', '--noclear', action='store_true', default=False,
+                           help='Not clear chroot before deploy.')
+    argparser.add_argument('-t', '--tarball', dest='local_tarball',
+                           default=None, help='Use local tarball dir. Imply -D')
+    argparser.add_argument(
+        '-s', '--suffix', help='Assign build_env suffix, ex build_env-demo.')
+    argparser.add_argument('-q', '--quiet', action='store_true',
+                           help="Don't display download status bar.")
+    argparser.add_argument('-l', '--list', action="store_true",
+                           default=False, help='List available platforms.')
+    argparser.add_argument('-p', dest='platforms',
+                           default="", help='Deploy platforms.')
+    argparser.add_argument('-b', '--branch', default="",
+                           help='Package branch for customize environment.')
+    argparser.add_argument('-c', '--clear-only',
+                           action='store_true', help='Only clear environment')
+    argparser.add_argument('-D', '--no-download', dest="download",
+                           action="store_false", help="Do not download.")
 
     args = argparser.parse_args(argv)
-    args.platforms = args.platforms.split()
+    args.platforms = list(set(args.platforms.split()))
+
+    if args.local_tarball:
+        args.download = False
 
     if not args.version:
         args.version = BuildEnv.getIncludeVariable('toolkit.config', 'LatestVersion')
+
+    args.platforms = filter_platforms(args.version, args.platforms)
 
     return args
 
 
 def main(argv):
     args = parse_args(argv)
-    dsm_ver, build_num = split_version(args.version)
-    platforms = get_platforms(dsm_ver, build_num, args.platforms)
-    tarball_root = DownloadDir
-
     if args.list:
-        print("Available platforms: " + " ".join(platforms))
+        logging.info("Available platforms: " + " ".join(args.platforms))
         return
 
-    if args.local_tarball:
-        tarball_root = args.local_tarball
+    tarball_root = args.local_tarball if args.local_tarball else DownloadDir
+    toolkit = ChrootToolkit(
+        args.version, args.platforms, args.suffix, tarball_root)
 
-    tarball_manager = TarballManager(dsm_ver, tarball_root)
+    toolkit.clean()
+    if args.clear_only:
+        return
+    if args.download:
+        toolkit.download(args.quiet)
 
-    if not args.local_tarball:
-        ToolkitDownloader(args.version, platforms, tarball_manager, args.quiet).download_toolkit()
-
-    check_tarball_exists(build_num, platforms, tarball_manager)
-    ToolkitDeployer(args, platforms, tarball_manager).deploy()
-    print("All task finished.")
+    toolkit.deploy()
+    logging.info("All task finished.")
 
 
 if __name__ == '__main__':
     try:
         main(sys.argv[1:])
     except EnvDeployError as e:
-        print("\n\033[91m%s:\033[0m" % type(e).__name__)
-        print(str(e))
-        print("\n[ERROR] " + " ".join(sys.argv) + " failed!")
+        logging.error(type(e).__name__)
+        logging.error(str(e))
+        logging.error(" ".join(sys.argv) + " failed!")
+        sys.exit(1)

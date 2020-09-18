@@ -1,7 +1,7 @@
 import os
 import configparser
 from collections import defaultdict
-
+# Copyright (c) 2000-2020 Synology Inc. All rights reserved.
 
 class ConfigNotFoundError(RuntimeError):
     pass
@@ -51,7 +51,6 @@ class DependsParser(ConfigParser):
     sec_ref_tag = 'ReferenceOnly-Tag'
     sec_pack = 'PackagePacking'
     sec_pack_tag = 'PackagePacking-Tag'
-    sec_unittest = 'Unittest'
     sec_default = 'default'
 
     def convert_value_str(self, d):
@@ -85,9 +84,6 @@ class DependsParser(ConfigParser):
     def pack_tag(self):
         return self._get_section_keys(self.sec_ref_tag)
 
-    @property
-    def unittest(self):
-        return self._get_section_keys(self.sec_unittest)
 
     def get_env_section(self, section):
         return self.convert_value_str(self.get_section_dict(section))
@@ -130,7 +126,7 @@ class ProjectDependsParser(ConfigParser):
 
     def get_dyn_sec_value(self, dyn_var, platform):
         if dyn_var not in self.config:
-            raise RuntimeError("[%s] not in project.depends." % dyn_var)
+            raise RuntimeError("[{}] not in project.depends.".format(dyn_var))
 
         if platform in self.get_section_dict(dyn_var):
             return self.get_section_dict(dyn_var)[platform][0]
@@ -138,6 +134,15 @@ class ProjectDependsParser(ConfigParser):
             return self.get_section_dict(dyn_var)['default'][0]
 
     def get_dyn_sec_values(self, dyn_var, platforms):
+        if dyn_var not in self.config:
+            raise RuntimeError("[{}] not in project.depends.".format(dyn_var))
+
+        if not platforms:
+            result = []
+            for value in self.get_section_dict(dyn_var).values():
+                result += value
+            return list(set(result))
+
         return [self.get_dyn_sec_value(dyn_var, _) for _ in platforms]
 
 

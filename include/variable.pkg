@@ -1,11 +1,11 @@
 #!/bin/bash
-# Copyright (c) 2000-2016 Synology Inc. All rights reserved.
+# Copyright (c) 2000-2020 Synology Inc. All rights reserved.
 
 if [ -z "$__INCLUDE_VARIABLE_PKG__" ]; then
 __INCLUDE_VARIABLE_PKG__=defined
 
 VERSION_FILE=/PkgVersion
-DownloadServer="sourceforge.net/projects/dsgpl/files"
-
+SpkResultDir="result_spk"
+BuildEnvDir="$ScriptsDir/../build_env"
 fi
 # vim:ft=sh

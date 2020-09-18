@@ -12,7 +12,8 @@ ConfigOpt32="--host=i686-pc-linux-gnu --target=i686-pc-linux-gnu --build=i686-pc
 # For sdk usbcam
 HOST32=i686-pc-linux-gnu
 
-CFLAGS32="-D$PLATFORM_FAMILY -DSYNO_X64 -O2"
+PLAT_FLAGS="-DSYNO_X64"
+CFLAGS32="-D$PLATFORM_FAMILY -O2"
 LDFLAGS32=""
 CC32=${ToolChainPrefix32}gcc
 CXX32=${ToolChainPrefix32}g++
@@ -36,7 +37,7 @@ ConfigOpt64="--host=x86_64-pc-linux-gnu --target=x86_64-pc-linux-gnu --build=i68
 # For sdk usbcam
 HOST64=x86_64-pc-linux-gnu
 
-CFLAGS64="-D$PLATFORM_FAMILY -DSYNO_X64 -O2"
+CFLAGS64="-D$PLATFORM_FAMILY -O2"
 LDFLAGS64=
 CC64=${ToolChainPrefix64}gcc
 CXX64=${ToolChainPrefix64}g++
@@ -47,7 +48,7 @@ RANLIB64=${ToolChainPrefix64}ranlib
 NM64=${ToolChainPrefix64}nm
 READELF64=${ToolChainPrefix64}readelf
 
-KernelToolchain="gcc493_glibc220_linaro_x86_64"
-ToolchainTGZList="$KernelToolchain gcc493_glibc220_linaro_i686on64"
+KernelToolchain="gcc730_glibc226_x86_64"
+ToolchainTGZList="$KernelToolchain gcc730_glibc226_i686on64"
 SynoKernelConfig="x86_64"
 SynoGNUSources="x86 x64"

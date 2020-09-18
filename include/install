@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (c) 2000-2016 Synology Inc. All rights reserved.
+# Copyright (c) 2000-2020 Synology Inc. All rights reserved.
 
 if [ -z "$__INCLUDE_INSTALL__" ]; then
 __INCLUDE_INSTALL__=defined
@@ -7,14 +7,18 @@ __INCLUDE_INSTALL__=defined
 Source include/config
 Source include/check
 Source include/platforms
+
+Source include/virtualProject
 Source include/applyEnv
 BUILD_TARGET=""
 
 PlatformOpts=`AllPlatformOptionsComma`
-DefaultLongArgs="${PlatformOpts}platform:,with-debug,help"
-DefaultArgs="dhp:"
+DefaultLongArgs="${PlatformOpts}platform:,with-debug,help,parallel:"
+DefaultArgs="dhp:T"
 IsDebugBuild="N"
 DebType="bin"
+Parallel=false
+ProcessCount=8
 
 ParseDefaultInstallArgs(){
 UnHandledOpt=
@@ -32,6 +36,11 @@ while [ -n $1 ]; do
 		"-d" | "--with-debug")
 			export NOSTRIP="NOSTRIP"
 			IsDebugBuild="Y"
+			;;
+		"--parallel")
+			Parallel=true
+			ProcessCount=$2
+			shift
 			;;
 		"--help" | "-h")
 			Usage
@@ -68,6 +77,41 @@ if [ -z "$BUILD_OPT" ]; then
 fi
 }
 
+_MVDIR() {
+	local SOURCE="$1"
+	local DEST="$2"
+
+	[ ! -d "$TmpInstDir/$SOURCE" ] && return
+
+	if [ -n "$(ls --almost-all "$TmpInstDir/$SOURCE")" ]; then
+		echo "Move files from $SOURCE to $DEST"
+		mkdir --parents "$TmpInstDir/$DEST"
+		mv --no-clobber "$TmpInstDir/$SOURCE"/* "$TmpInstDir/$DEST"
+		rmdir "$TmpInstDir/$SOURCE" || echo "Error"
+	fi
+}
+
+NormailizeTarballFHS() {
+	local proj=$1
+	NormailizeLIB ${proj}
+	NormailizeBIN ${proj}
+	NormailizeSBIN ${proj}
+}
+
+NormailizeLIB() {
+	_MVDIR "/usr/lib64" "/usr/lib"
+	_MVDIR "/lib64" "/usr/lib"
+	_MVDIR "/lib" "/usr/lib"
+}
+
+NormailizeBIN() {
+	_MVDIR "/bin" "/usr/bin"
+}
+
+NormailizeSBIN() {
+	_MVDIR "/sbin" "/usr/sbin"
+}
+
 SetupInstallEnv(){
 	local debugBuild=$1
 
@@ -83,28 +127,23 @@ SetupInstallEnv(){
 	[ -d "$DebPkgDir" ] || mkdir -p $DebPkgDir
 }
 
-UnifyInstallProjects() {
+NormalizeInstallProjects() {
 	local projectList=
 
 	for proj in $@; do
 		projectList="${projectList} `basename ${proj}`"
 	done
 
+	if ! projectList=$(${ScriptsDir}/ProjectDepends.py -p "${PLATFORM_ABBR}" ${projectList}) ; then
+		CheckErrorOut 1 "Failed to get dependency list !!"
+	fi
+
 	echo $projectList
-}
-
-ExcludeProjects() {
-	local projList=$@
-	local retProjs=
-
-	retProjs=$(ExcludeList "$projList" "$(getPlatformExcludeProjs)")
-	BuildMachineOnly || retProjs=$(ExcludeList "$retProjs" ".*-virtual-protection dsm-Protection")
-	echo $retProjs
 }
 
 InstallProject() {
 	local proj=$1
-	local baseProj="${proj}"
+	local baseProj="`GetVirInstProjectName ${proj}`"
 	local installScript=
 
 	cd $SourceDir/$baseProj
@@ -115,11 +154,21 @@ InstallProject() {
 	fi
 
 	INFO "Execute install script: $installScript"
-	(. $installScript)
+	(
+		. $installScript
+	)
 
 	CheckProjectStatus install $proj > /dev/null
 
 	return $?
+}
+
+
+SetupTmpInstDir() {
+	local proj=$1
+	TmpInstDir="/tmp/_install_${proj}"
+	rm -rf "$TmpInstDir"
+	mkdir -p "$TmpInstDir"
 }
 
 SetupProjInstallEnv() {
@@ -127,13 +176,20 @@ SetupProjInstallEnv() {
 
 	if Is64BitProject "${proj}"; then
 		INFO "ENV" "Using 64bit environment."
-		ApplyInstallEnv "64"
+		ApplyInstallEnv "64" "$proj"
 	else
 		INFO "ENV" "Using 32bit environment."
-		ApplyInstallEnv "32"
+		ApplyInstallEnv "32" "$proj"
 	fi
+}
 
-	rm -rf $TmpInstDir/*
+CheckTarballExist() {
+	local proj=$1
+	local tarball=${proj}.txz
+
+	if [ ! -f "$TarBallDir/$tarball" ] && CheckInList "$proj" "$PlatformAppList"; then
+		ERROR "No such file $TarBallDir/$tarball"
+	fi
 }
 
 CreateTarball() {
@@ -141,10 +197,9 @@ CreateTarball() {
 	local haveFile=`ls $TmpInstDir`
 
 	if [ ! -z "$haveFile" ]; then
-		echo ""
 		echo "Create ${proj}.txz ..."
-		( cd "$TmpInstDir"; XZ_OPT=-3 tar cJpvf "$TarBallDir/${proj}.txz" * )
-		echo "[Done]"
+		( cd "$TmpInstDir"; XZ_OPT=-3 tar cJpf "$TarBallDir/${proj}.txz" * )
+		echo "Done"
 	else
 		INFO "WARNING" "$TmpInstDir is empty!"
 	fi
@@ -156,8 +211,8 @@ InstallPreparePkgDir() # $1: Target Dir $2: Dir list
 	TargetDir="$1"
 	for dirmode in $2
 	do
-		DIR=`echo ${dirmode} | cut -f1 -d':'`	
-		MODE=`echo ${dirmode} | cut -f2 -d':' -s`	
+		DIR=`echo ${dirmode} | cut -f1 -d':'`
+		MODE=`echo ${dirmode} | cut -f2 -d':' -s`
 		if [ -n "${MODE}" ]; then
 			MODE_ARG="-m ${MODE}"
 		fi
@@ -199,55 +254,6 @@ InstallPkgFiles() # $1: Target Dir $2: Path $3: Default mode $4: FileList
 			${STRIP} -s --remove-section=.note --remove-section=.comment "$FileInst"
 		fi
 	done
-}
-
-InstallPrepareDir() # $1: Dir list
-{
-	InstallPreparePkgDir "$TmpInstDir" "$@"
-}
-
-InstallFiles() # $1: Path $2: Default mode $3: FileList
-{
-	InstallPkgFiles "$TmpInstDir" "$@"
-}
-
-DoInstall()
-{
-	InstallPrepareDir "${INSTALL_DIRS}"
-
-	InstallFiles $LibDir 755 "${INSTALL_LIB}"
-	InstallFiles "/bin" 755 "${INSTALL_BIN}"
-	InstallFiles "/sbin" 755 "${INSTALL_SBIN}"
-	InstallFiles "/usr/bin" 755 "${INSTALL_USR_BIN}"
-	InstallFiles "/usr/sbin" 755 "${INSTALL_USR_SBIN}"
-	InstallFiles "/usr/syno/bin" 755 "${INSTALL_SYNO_BIN}"
-	InstallFiles "/usr/syno/sbin" 755 "${INSTALL_SYNO_SBIN}"
-	InstallFiles "/usr/syno/etc/rc.d" 755 "${INSTALL_RCD}"
-	InstallFiles "/etc" 644 "${INSTALL_ETC}"
-	InstallFiles "/etc/pam.d/" 644 "${INSTALL_PAM}"
-	InstallFiles "/usr/syno/etc" 644 "${INSTALL_SYNO_ETC}"
-	InstallFiles "/usr/local/bin" 755 "${INSTALL_LOCAL_BIN}"
-	InstallFiles "/usr/local/sbin" 755 "${INSTALL_LOCAL_SBIN}"
-	InstallFiles "/usr/local/etc/rc.d" 755 "${INSTALL_LOCAL_RCD}"
-	InstallFiles "/usr/local/etc" 644 "${INSTALL_LOCAL_ETC}"
-}
-
-is_support_apparmor() {
-	SupportAppArmorPlatform
-}
-
-_create_empty_tgz() {
-	touch ${TarBallDir}/${ThisProj}.tar
-	gzip ${TarBallDir}/${ThisProj}.tar
-	mv ${TarBallDir}/${ThisProj}.tar.gz ${TarBallDir}/${ThisProj}.tgz
-}
-
-_create_empty_txz() {
-	tar cJf "$TarBallDir/${ThisProj}.txz" --files-from /dev/null
-}
-
-SkipThisProject() {
-	_create_empty_txz
 }
 
 fi

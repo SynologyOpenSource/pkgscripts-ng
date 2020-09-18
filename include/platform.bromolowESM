@@ -1,0 +1,74 @@
+ToolChainDir32="/usr/local/i686-pc-linux-gnu"
+ToolChainPrefix32="/usr/local/i686-pc-linux-gnu/bin/i686-pc-linux-gnu-"
+ToolChainBin32="${ToolChainDir32}/bin"
+ToolChainInclude32="${ToolChainDir32}/i686-pc-linux-gnu/sys-root/usr/include"
+ToolChainLib32="${ToolChainDir32}/i686-pc-linux-gnu/sys-root/lib"
+ToolChainSysRoot32="${ToolChainDir32}/i686-pc-linux-gnu/sys-root"
+ARCH="x86_64"
+PLATFORM_FAMILY="SYNOPLAT_F_X86_64"
+
+ConfigOpt32="--host=i686-pc-linux-gnu --target=i686-pc-linux-gnu --build=i686-pc-linux"
+
+# For sdk usbcam
+HOST32=i686-pc-linux-gnu
+
+CFLAGS32="-D$PLATFORM_FAMILY -DSYNO_BROMOLOW -DSYNO_SAS -DSYNO_ESM -O2"
+LDFLAGS32=""
+CC32=${ToolChainPrefix32}gcc
+CXX32=${ToolChainPrefix32}g++
+LD32=${ToolChainPrefix32}ld
+AR32=${ToolChainPrefix32}ar
+STRIP32=${ToolChainPrefix32}strip
+RANLIB32=${ToolChainPrefix32}ranlib
+NM32=${ToolChainPrefix32}nm
+READELF32=${ToolChainPrefix32}readelf
+
+ToolChainDir64="/usr/local/x86_64-pc-linux-gnu"
+ToolChainPrefix64="/usr/local/x86_64-pc-linux-gnu/bin/x86_64-pc-linux-gnu-"
+ToolChainBin64="${ToolChainDir64}/bin"
+ToolChainInclude64="${ToolChainDir64}/x86_64-pc-linux-gnu/sys-root/usr/include/"
+ToolChainSysInclude64=""
+ToolChainLib64="${ToolChainDir64}/x86_64-pc-linux-gnu/sys-root/lib"
+ToolChainSysRoot64="${ToolChainDir64}/x86_64-pc-linux-gnu/sys-root"
+
+ConfigOpt64="--host=x86_64-pc-linux-gnu --target=x86_64-pc-linux-gnu --build=i686-pc-linux-gnu"
+
+# For sdk usbcam
+HOST64=x86_64-pc-linux-gnu
+
+CFLAGS64="-D$PLATFORM_FAMILY -DSYNO_BROMOLOW -DSYNO_SAS -DSYNO_ESM -O2 -fPIC"
+LDFLAGS64=""
+CC64=${ToolChainPrefix64}gcc
+CXX64=${ToolChainPrefix64}g++
+LD64=${ToolChainPrefix64}ld
+AR64=${ToolChainPrefix64}ar
+STRIP64=${ToolChainPrefix64}strip
+RANLIB64=${ToolChainPrefix64}ranlib
+NM64=${ToolChainPrefix64}nm
+
+#For Grub in EFI framework
+GrubHOST64=x86_64-pc-linux-gnu
+
+GrubToolChainDir64="/usr/local/x86_64-pc-linux-gnu"
+GrubToolChainPrefix64="/usr/local/x86_64-pc-linux-gnu/bin/x86_64-pc-linux-gnu-"
+GrubToolChainBin64="${GrubToolChainDir64}/bin"
+GrubToolChainInclude64="${GrubToolChainDir64}/include"
+GrubToolChainSysInclude64=""
+GrubToolChainLib64="${GrubToolChainDir64}/lib"
+
+GrubConfigOpt64="--host=x86_64-pc-linux-gnu --target=x86_64-pc-linux-gnu --build=i686-pc-linux-gnu"
+
+GrubCFLAGS64="-I${GrubToolChainInclude64} -D$PLATFORM_FAMILY -DSYNO_BROMOLOW -fPIC"
+GrubLDFLAGS64="-L${GrubToolChainLib64}"
+GrubCC64=${GrubToolChainPrefix64}gcc
+GrubCXX64=${GrubToolChainPrefix64}g++
+GrubLD64=${GrubToolChainPrefix64}ld
+GrubAR64=${GrubToolChainPrefix64}ar
+GrubSTRIP64=${GrubToolChainPrefix64}strip
+GrubRANLIB64=${GrubToolChainPrefix64}ranlib
+GrubNM64=${GrubToolChainPrefix64}nm
+
+KernelToolchain="gcc473_glibc217_x86_64"
+ToolchainTGZList="$KernelToolchain gcc463_glibc213_i686"
+SynoKernelConfig="bromolow"
+SynoGNUSources="x86 x64"

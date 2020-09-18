@@ -1,6 +1,9 @@
+# Copyright (c) 2000-2020 Synology Inc. All rights reserved.
+
 import multiprocessing
 import traceback
 
+PROCESSES = None
 
 class LogExceptions(object):
     def __init__(self, callable):
@@ -19,7 +22,7 @@ class LogExceptions(object):
 
 
 def doParallel(func, items, *args, **kwargs):
-    pool = multiprocessing.Pool(processes=None)
+    pool = multiprocessing.Pool(processes=PROCESSES)
     results = []
 
     try:
@@ -42,7 +45,7 @@ def doParallel(func, items, *args, **kwargs):
 
 
 def doPlatformParallel(func, platforms, *args, **kwargs):
-    pool = multiprocessing.Pool(processes=None)
+    pool = multiprocessing.Pool(processes=PROCESSES)
     results = dict()
     output = dict()
 
@@ -65,7 +68,7 @@ def doPlatformParallel(func, platforms, *args, **kwargs):
 
 
 def parallelDict(dict):
-    pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
+    pool = multiprocessing.Pool(processes=PROCESSES)
     results = []
     output = []
 

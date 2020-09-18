@@ -12,7 +12,8 @@ ConfigOpt32="--host=armle-unknown-linux --target=armle-unknown-linux --build=i68
 # For sdk usbcam
 HOST32=arm-unknown-linux-gnueabi
 
-CFLAGS32="-mhard-float -mfpu=vfpv3-d16 -march=armv7-a -mcpu=marvell-pj4 -mtune=marvell-pj4 -DSYNO_MARVELL_ARMADA370 -D$PLATFORM_FAMILY -O2 -fno-diagnostics-show-caret -Wno-unused-local-typedefs"
+PLAT_FLAGS="-DSYNO_MARVELL_ARMADA370"
+CFLAGS32="-mhard-float -mfpu=vfpv3-d16 -march=armv7-a -mcpu=marvell-pj4 -mtune=marvell-pj4 -D$PLATFORM_FAMILY -O2 -fno-diagnostics-show-caret -Wno-unused-local-typedefs"
 LDFLAGS32=""
 CC32=${ToolChainPrefix32}gcc
 CXX32=${ToolChainPrefix32}g++
@@ -23,8 +24,9 @@ RANLIB32=${ToolChainPrefix32}ranlib
 NM32=${ToolChainPrefix32}nm
 READELF32=${ToolChainPrefix32}readelf
 
-KernelToolchain="gcc493_glibc220_hard"
+KernelToolchain="gcc730_glibc226_hard"
 ToolchainTGZList="$KernelToolchain gcc445_glibc211_softfp_armada370"
 UBootToolchain="gcc445_glibc211_softfp_armada370"
 SynoKernelConfig="armada370"
 SynoGNUSources="armada370"
+QemuStatic="qemu-arm-static"

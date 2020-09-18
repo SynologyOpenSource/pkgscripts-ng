@@ -1,0 +1,123 @@
+#! /bin/bash
+# Copyright (c) 2000-2020 Synology Inc. All rights reserved.
+
+PackageBuilder=true # shellcheck disable=SC2034
+PackageInstaller=true # shellcheck disable=SC2034
+PackageCollecter=true # shellcheck disable=SC2034
+
+CAN_BE_CLOSED="PackageBuilder PackageInstaller PackageCollecter"
+UNIFORM="PackagePacker WorkerFactory EnvPrepareWorker ProjectTraverser ProjectLinker"
+CUSTOMIZED="PreBuilder PostBuilder PreInstaller PostInstaller PreCollecter PostCollecter"
+
+DO_CHECK=false
+DO_EXECUTE=false
+
+Usage()
+{
+    cat << EOF
+$0 [-c|-e] CUSTOMIZE_FILE STAGE_NAME
+CUSTOMIZE_FILE the customize file to source
+STAGE          the stage to execute
+
+Options
+    -c,
+        check if the stage is legal
+    -e,
+        execute the stage
+EOF
+}
+
+while getopts "ceh" opt; do
+    case "$opt" in
+        c)
+            DO_CHECK=true
+            shift
+            ;;
+        e)
+            DO_EXECUTE=true
+            shift
+            ;;
+        h)
+            Usage
+            exit 0
+            ;;
+       *)
+           Usage
+           exit 1
+           ;;
+    esac
+done
+
+CUSTOMIZE_FILE="$1"
+STAGE_NAME="$2"
+
+
+if [ -z "$CUSTOMIZE_FILE" ]; then
+    exit 0
+fi
+
+if [ -f "$CUSTOMIZE_FILE" ]; then
+    source "$CUSTOMIZE_FILE"
+fi
+
+if [ -z "$STAGE_NAME" ]; then
+    echo "no input stage name"
+    exit 1
+fi
+
+
+
+CheckStage()
+{
+    for stage in $CAN_BE_CLOSED; do
+        if [ "$STAGE_NAME" = "$stage" ]; then
+            if "${!STAGE_NAME}"; then
+                return 0
+            else
+                return 1
+            fi
+        fi
+    done
+
+
+    for stage in $UNIFORM; do
+        if [ "$STAGE_NAME" = "$stage" ]; then
+            return 0
+        fi
+    done
+
+    local is_stage_exist=false
+    for stage in $CUSTOMIZED; do
+        if [ "$STAGE_NAME" = "$stage" ]; then
+            is_stage_exist=true
+            break
+        fi
+    done
+
+    if ! $is_stage_exist; then
+        echo "stage [$STAGE_NAME] does not allowed."
+        return 1
+    fi
+
+    if type "$STAGE_NAME" > /dev/null 2>&1; then
+        return 0
+    else
+        return 1
+    fi
+
+    return 0
+}
+
+ExecuteStage()
+{
+    $STAGE_NAME || return 1
+}
+
+if $DO_CHECK; then
+    CheckStage || exit 1
+fi
+if $DO_EXECUTE; then
+    ExecuteStage || exit 1
+fi
+
+exit 0

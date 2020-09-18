@@ -1,24 +1,36 @@
 #!/bin/bash
-# Copyright (c) 2000-2016 Synology Inc. All rights reserved.
+# Copyright (c) 2000-2020 Synology Inc. All rights reserved.
 
 if [ -z "$__INCLUDE_CHECK__" ]; then
 __INCLUDE_CHECK__=defined
 
-Source include/init
-Source "include/config"
-Source "include/platforms"
-Source "include/errors"
+. "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"/init
 
-# Build system will select virtual build script first and then projName script in build.
+Source include/variable
+Source include/virtualProject
+Source include/config
+Source include/platforms
+
+
+GetProjectPath() {
+	local project="$1"
+
+	if [ "$(basename "$SynoBase")" = "ds.base" ]; then
+		echo "$SourceDir/$(GetVirtualProjectName "$(GetVirInstProjectName "$project")")"
+	else
+		echo "$SourceDir/$(GetVirInstProjectName "$project")"
+	fi
+}
+
 CheckScript() {
 	local projName="$1"
 	local type=$2
 	local findScript=
+	local virtualName=$(GetVirtualProjectExtension $projName)
+	local projPath="$(GetProjectPath "$projName")"
 
-	if [ -f "$SourceDir/$projName/$ConfDir/$type" ]; then
-		findScript="$SourceDir/$projName/$ConfDir/$type"
-	elif [ -f "$ScriptsDir/$type/$projName" ]; then
-		findScript="$ScriptsDir/$type/$projName"
+	if [ -f "$projPath/$ConfDir/$type$virtualName" ]; then
+		findScript="$projPath/$ConfDir/$type$virtualName"
 	fi
 
 	echo $findScript
@@ -29,24 +41,11 @@ FindScript() {
 	local projName=$1
 	local type=$2
 	local script=
-	local removeArchExt="-32"
-	# if default build 32bit, user will input project-virtual-64.
-	if [ "$DefaultBuild32Bit" = "yes" ]; then
-		removeArchExt="-64"
-	fi
 
-	script=$(CheckScript $projName $type)
-	if [ -z "$script" ]; then
-		# for project-virtual-junior-32
-		script=$(CheckScript ${projName//$removeArchExt/} $type)
-		if [ -z "$script" ]; then
-			# for project-virtual-32
-			script=$(CheckScript ${projName//-virtual$removeArchExt/} $type)
-		fi
-	fi
+	script="$(CheckScript "$projName" "$type")"
 
 	if [ -n "$script" ]; then
-		echo $script
+		echo "$script"
 		return 0
 	else
 		return 1
@@ -56,6 +55,11 @@ FindScript() {
 findBuildScript() {
 	local projName=$1
 	FindScript "$projName" "build"
+}
+
+findBuildFlagsScript() {
+	local projName=$1
+	FindScript "$projName" "buildflags"
 }
 
 findInstallDevScript() {
@@ -70,12 +74,17 @@ findInstallScript() {
 
 findDependConf() {
 	local projName="$1"
-	local conf=$(FindScript "$projName" "depends")
-	if [ -n "$conf" ]; then
-		echo "$conf"
-	else
-		echo "$ScriptsDir/$GlobalDependConf"
-	fi
+	FindScript "$projName" "depends"
+}
+
+FindConflictConf() {
+	local projName="$1"
+	FindScript "$projName" "conflict"
+}
+
+findErrorScript() {
+	local projName=$1
+	FindScript "$projName" "error"
 }
 
 CheckPermission()
@@ -107,15 +116,20 @@ CheckInList() {
 	return 1
 }
 
+CheckProjectStatus() {
+	$ScriptsDir/include/errors.py $1 $2
+}
+
 CheckErrorLog()
 {
 	local errors
 	local warns
 	local logFile
-	local warnCount
+	local warnCount blocked blockedList
 	local allProjCount=0
 	local errProjCount=0
 	local warnProjCount=0
+	local blockProjCount=0
 	local ret=
 	local logType=$1
 	shift
@@ -149,21 +163,25 @@ CheckErrorLog()
 			if [ "$1" = "build" ]; then
 				warnCount=`grep -s "warning:" $logFile | wc -l`
 				if [ 0 -ne $warnCount ]; then
-					printf "%-30s:\t%4d warning(s)\n" $proj $warnCount
+					printf "%-40s:\t%4d warning(s)\n" $proj $warnCount
 					warns="Y"
 					warnProjCount=$(( $warnProjCount + 1 ))
 				fi
 			fi
+			blocked="$(grep -s "^\[Blocked\]" $logFile)"
+			if [ -n "$blocked" ]; then
+				blockedList="$blockedList $proj"
+				blockProjCount=$(( $blockProjCount + 1 ))
+			fi
 		fi
 		allProjCount=$(( $allProjCount + 1 ))
 	done
+	[ -n "$blockedList" ] && echo -e "\nBlocked projects:$blockedList\n"
 	echo -n "$allProjCount projects, $errProjCount failed"
 	if [ "$1" = "build" ]; then
-		echo ", $warnProjCount have warnings."
-	else
-		echo "."
+		echo -n ", $warnProjCount have warnings"
 	fi
-
+	echo ", $blockProjCount blocked."
 	echo ""
 	if [ "$errors" = "Y" ]; then
 		ERROR "Check [${errorFile}] for fixing errors."
@@ -184,29 +202,36 @@ CheckErrorOut()
 }
 
 INFO(){
+	local std_dest
+	[ "$ShowDebug" = "yes" ] && std_dest=">&3"
+
 	if [ $# -lt 2 ]; then
-		echo -e "[INFO] $1"
+		eval echo -e "[INFO] $1" $std_dest
 	else
 		if [ -z "$1" ]; then
-			echo -e [INFO] $2
+			eval echo -e "[INFO] $2" "$std_dest"
 		else
-			echo -e [$1] $2
+			eval echo -e "[$1] $2" "$std_dest"
 		fi
 	fi
 }
 
 ERROR(){
 	if [ $# -lt 2 ]; then
-		echo -e "\n[Error] $1\n" >&2
+		echo -e "[Error] $1" >&2
 	else
 		if [ -z "$1" ]; then
-			echo -e [Error] $2 >&2
+			echo -e "[Error] $2" >&2
 		else
-			echo -e [$1] $2 >&2
+			echo -e "[$1] $2" >&2
 		fi
 	fi
 }
 
+WARNING()
+{
+	echo -e "\033[93m[WARNING] $1\033[0m" >&2
+}
 
 ShowTimeCost()
 {
@@ -225,7 +250,7 @@ ShowTimeCost()
 	DIFF_MIN=$(((${DIFF_INT}/60)%60))
 	DIFF_HOUR=$(((${DIFF_INT}/3600)%60))
 
-	printf "Time cost: %02d:%02d:%02d %s\n" ${DIFF_HOUR} ${DIFF_MIN} ${DIFF_SEC}    ${TAG_INTERNAL}
+	printf "Time cost: %02d:%02d:%02d %s\n" ${DIFF_HOUR} ${DIFF_MIN} ${DIFF_SEC} "${TAG_INTERNAL}"
 }
 
 CheckTimeCostLog()
@@ -244,11 +269,25 @@ CheckTimeCostLog()
 		if [ -r "$logFile" ]; then
 			#echo "file: ${logFile}"
 			result=`grep "Time cost:" $logFile`
-			echo $result
+			[ -n "$result" ] && echo "$result"
 		fi
 	done
 
 	echo ""
+}
+
+GetBaseDirs()
+{
+	# by default, the BASEDIR should be /synosrc or /synosrc.xxx
+	# get dir path of scripts for following inclusion of other scripts
+	CurDir=`pwd`
+	BASEDIR=`dirname $1`
+	BASEDIR=`dirname ${BASEDIR}`
+
+	#echo "file: $0"
+	#echo "CurDir: ${CurDir}"
+	#echo "ScriptDir: ${ScriptsDir}"
+	echo "BASEDIR: ${BASEDIR}"
 }
 
 # FIXME for test
@@ -274,8 +313,20 @@ _get_key_value()
 	echo "$val"
 }
 
+GetDSMCriticalUpdateNumber() {
+	_get_key_value "smallfixnumber" "$VERSION_FILE"
+}
+
 GetDSMBuildNumber() {
 	_get_key_value "buildnumber" "$VERSION_FILE"
+}
+
+GetDSMPacking() {
+	_get_key_value "packing" "$VERSION_FILE"
+}
+
+GetDSMPackingID() {
+	_get_key_value "packing_id" "$VERSION_FILE"
 }
 
 GetDSMMajorNumber()
@@ -288,9 +339,35 @@ GetDSMMinorNumber()
 	_get_key_value "minorversion" "$VERSION_FILE"
 }
 
+GetSmallFixNumber()
+{
+	_get_key_value "smallfixnumber" "$VERSION_FILE"
+}
+
+GetProductVersion()
+{
+	_get_key_value "productversion" "$VERSION_FILE"
+}
+
+GetBuildTime()
+{
+	_get_key_value "buildtime" "$VERSION_FILE"
+}
+
+GetBuildDate()
+{
+	_get_key_value "builddate" "$VERSION_FILE"
+}
+
 Is64BitProject() {
 	local Proj=$1
 	local ProjExt=
+
+	if [ "$DefaultBuild32Bit" = "yes" ]; then
+		ProjExt=`GetVirtualProjectExtension $Proj`
+		HasSubStr "$ProjExt" "64$"
+		return
+	fi
 
 	Is32BitProject $Proj && return 1
 	return 0
@@ -304,7 +381,8 @@ Is32BitProject() { #{{{
 		return 0
 	fi
 
-	return 1
+	ProjExt=`GetVirtualProjectExtension $Proj`
+	HasSubStr "$ProjExt" "32$"
 } #}}}
 
 getPlatformExcludeProjs() {
@@ -338,42 +416,20 @@ ExcludeList() {
 	return 0
 }
 
-GetBuildPhase() {
-	local _file=$1
-	local _phase=
-
-	[ -z "$_file" ] && _file=$VERSION_FILE
-
-	_phase="`grep buildphase $_file | cut -d'"' -f2`"
-
-	if [ -n "$_phase" ]; then
-		echo $_phase
-		return 0
-	else
-		return 1
-	fi
-}
-
-GetBuildStage() {
-	echo release
-	return 0
-}
-
 SetupDSMBuildNumber() {
-	unset DSM_BUILD_NUM DSM_SHLIB_MAJOR DSM_SHLIB_MAJOR
+	unset DSM_BUILD_NUM DSM_SHLIB_MAJOR DSM_SHLIB_MINOR SMALLFIX_NUM DSM_STAGE PRODUCT_VERSION PACKING PACKING_ID
 	local file=${1:-$VERSION_FILE}
-	local phase=`GetBuildPhase $file`
 
-	if [ -z "$DSM_STAGE" ]; then
-		# get global info
-		DSM_BUILD_NUM=$(GetDSMBuildNumber "$file")
-		DSM_SHLIB_MAJOR=$(GetDSMMajorNumber "$file")
-		DSM_SHLIB_MINOR=$(GetDSMMinorNumber "$file")
-		DSM_STAGE=$(GetBuildStage $file $phase)
-		if [ $? -ne 0 ]; then
-			ERROR "cannot get build stage"
-			exit 1
-		fi
+	DSM_BUILD_NUM=$(GetDSMBuildNumber "$file")
+	DSM_SHLIB_MAJOR=$(GetDSMMajorNumber "$file")
+	DSM_SHLIB_MINOR=$(GetDSMMinorNumber "$file")
+	SMALLFIX_NUM=$(GetSmallFixNumber "$file")
+	PRODUCT_VERSION=$(GetProductVersion "$file")
+	PACKING=$(GetDSMPacking "$file")
+	PACKING_ID=$(GetDSMPackingID "$file")
+	if [ $? -ne 0 ]; then
+		ERROR "cannot get build stage"
+		exit 1
 	fi
 
 	if [ -z "$DSM_BUILD_NUM" ]; then
@@ -383,7 +439,7 @@ SetupDSMBuildNumber() {
 	[ -z "$DSM_SHLIB_MAJOR" ] && DSM_SHLIB_MAJOR=0
 	[ -z "$DSM_SHLIB_MINOR" ] && DSM_SHLIB_MINOR=0
 
-	export DSM_BUILD_NUM DSM_SHLIB_MAJOR DSM_SHLIB_MINOR
+	export DSM_BUILD_NUM DSM_SHLIB_MAJOR DSM_SHLIB_MINOR SMALLFIX_NUM PRODUCT_VERSION PACKING PACKING_ID
 }
 
 fi

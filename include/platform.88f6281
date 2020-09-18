@@ -1,0 +1,37 @@
+ToolChainDir32="/usr/local/arm-marvell-linux-gnueabi/arm-marvell-linux-gnueabi"
+ToolChainPrefix32="/usr/local/arm-marvell-linux-gnueabi/bin/arm-marvell-linux-gnueabi-"
+ToolChainBin32="${ToolChainDir32}/bin"
+ToolChainInclude32="${ToolChainDir32}/libc/include"
+ToolChainLib32="${ToolChainDir32}/libc/lib"
+ToolChainSysRoot="${ToolChainDir32}"
+ARCH="arm"
+
+ConfigOpt32="--host=armle-unknown-linux --target=armle-unknown-linux --build=i686-pc-linux"
+
+# For sdk usbcam
+HOST32=armle-unknown-linux
+
+CFLAGS32="-I${ToolChainInclude32} -DSYNO_MARVELL_88F6281 -O2"
+LDFLAGS32="-L${ToolChainLib32}"
+CC32=${ToolChainPrefix32}gcc
+CXX32=${ToolChainPrefix32}g++
+LD32=${ToolChainPrefix32}ld
+AR32=${ToolChainPrefix32}ar
+STRIP32=${ToolChainPrefix32}strip
+RANLIB32=${ToolChainPrefix32}ranlib
+NM32=${ToolChainPrefix32}nm
+READELF32=${ToolChainPrefix32}readelf
+
+StaticDir32="/usr/armle-linux-gnueabi-uclibc"
+StaticPrefix32="/usr/armle-linux-gnueabi-uclibc/bin/arm-uclibc-"
+StaticInclude32="${StaticDir32}/include"
+StaticLib32="${StaticDir32}/lib"
+STATIC_CFLAGS32="-I${StaticInclude32} -DSYNO_MARVELL_88F6281"
+STATIC_LDFLAGS32="-L${StaticLib32}"
+STATIC_CC32=${StaticPrefix32}gcc
+STATIC_LD32=${StaticPrefix32}ld
+STATIC_AR32=${StaticPrefix32}ar
+STATIC_STRIP32=${StaticPrefix32}strip
+STATIC_RANLIB32=${StaticPrefix32}ranlib
+STATIC_NM32=${StaticPrefix32}nm
+SYNO_KERNEL_SOURCE_DIR="linux-2.6.32"

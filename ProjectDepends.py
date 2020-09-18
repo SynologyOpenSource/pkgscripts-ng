@@ -1,18 +1,22 @@
 #!/usr/bin/python3
+# Copyright (c) 2000-2020 Synology Inc. All rights reserved.
 
 import sys
 import string
 import os
 import glob
 import argparse
+import pickle
+import pprint
+from collections import defaultdict
 import re
 
-ScriptDir = os.path.dirname(os.path.abspath(sys.argv[0]))
-sys.path.append(ScriptDir + '/include')
-sys.path.append(ScriptDir + '/include/python')
-import BuildEnv
+from include import pythonutils
+from include.python import BuildEnv
 from config_parser import DependsParser, ProjectDependsParser
+ScriptDir = os.path.dirname(os.path.abspath(sys.argv[0]))
 
+# XXX: unified the variable with pythonutils.py
 # config file, to get basic project parameters
 section_depends = "project dependency"
 section_variables = "variables"
@@ -42,64 +46,135 @@ class DependencyError(Exception):
         print(self.project)
 
 
+class ProjectNode:
+    def __init__(self, proj):
+        # FIXME name
+        self.proj = proj
+        self.depends = []
+        self.rev_depends = []
+        self.levels = defaultdict(set)
+        self.addProject(1, [self.proj])
+        self.success = False
+        self.visited = False
+
+    def updateDependLevel(self, child_node):
+        for level, projs in child_node.levels.items():
+            self.addProject(level + 1, projs)
+
+    def addProject(self, level, projs):
+        self.levels[level].update(projs)
+
+    def addDependProj(self, child_node):
+        self.depends.append(child_node)
+        child_node.rev_depends.append(self)
+        self.updateDependLevel(child_node)
+
+    def getProjectOrder(self):
+        orders = []
+        for level, projs in sorted(self.levels.items(), key=lambda x: x[0], reverse=True):
+            for proj in projs:
+                if proj not in orders:
+                    orders.append(proj)
+        return orders
+
+    def update_status(self, success):
+        self.visited = True
+        self.success = success
+
+    def getProjectDepends(self, level):
+        order = self.getProjectOrder()
+        if level == 0:
+            return order
+        else:
+            return sorted(self.getLevelsProjects(1, level), key=lambda x: order.index(x))
+
+    def getLevelsProjects(self, low, high):
+        output = set()
+
+        for i in range(low, high + 1):
+            output.update(self.levels[i])
+
+        return output
+
+    def __repr__(self):
+        return self.proj
+
+
 class DepGraph:
     # all these attributes are not necessary, just for prototype reference
-    def __init__(self, dictIn, level, direct):
-        self.dict = dictIn
+    def __init__(self, dictDepends, direct):
+        self.root = ProjectNode('DependRoot')
+        self.root.update_status(True)
         self.direct = direct
         self.stack = []
-        self.listOut = []
-        self.level = level
-        self.visited = {}
-        self.graph = {}
+        self.dictDepends = dictDepends
+        self.reverseDep = defaultdict(list)
+        self.created_projects = {}
 
-    def traveseList(self, listProjs, t_level):
-        if self.level != 0 and t_level >= self.level:
-            return
+    def getProjectNode(self, proj):
+        if proj not in self.created_projects:
+            raise RuntimeError("%s not created." % proj)
+        return self.created_projects[proj]
 
+    def createDepGraph(self, head, listProjs):
         for proj in listProjs:
             if proj in self.stack:
                 raise DependencyError(self.stack, proj)
-            if proj in self.visited and t_level >= self.visited[proj]:
-                continue
             self.stack.append(proj)
 
-            self.visited[proj] = t_level
+            if proj in self.created_projects:
+                proj_node = self.created_projects[proj]
+            else:
+                proj_node = self.created_projects[proj] = ProjectNode(proj)
 
-            depProj = self.getDepProjList(proj)
-            if len(depProj) > 0:
-                self.traveseList(depProj, t_level+1)
+                depProj = self.getDepProjList(proj)
+                if len(depProj) > 0:
+                    self.createDepGraph(proj_node, depProj)
 
-            if proj not in self.listOut:
-                self.listOut.append(proj)
+            head.addDependProj(proj_node)
 
             self.stack.pop()
 
-    def traverseDepends(self, listProjs):
+    def dumpGraph(self, head):
+        print(head.proj)
+        pprint.pprint(head.levels)
+        for p in head.depends:
+            self.dumpGraph(p)
+
+    def traverseDepends(self, listProjs, level):
         try:
-            self.traveseList(listProjs, 0)
+            self.createDepGraph(self.root, listProjs)
+            # self.dumpGraph(self.root)
         except DependencyError as e:
             e.dumpCircluarDepList()
             sys.exit(1)
-        return self.listOut
 
-    def getReverseList(self, proj, traveseDict):
-        reverseList = []
-        for key in traveseDict.keys():
-            if proj in traveseDict[key]:
-                reverseList.append(key)
-        return reverseList
+        output = []
+        t_level = level if level == 0 else level + 1
+        output = self.root.getProjectDepends(t_level)
+        output.remove(self.root.proj)
+
+        if self.direct == 'backwardDependency':
+            output.reverse()
+
+        return output
 
     def getReverseDep(self, proj):
-        return self.getReverseList(proj, self.dict)
+        reverseList = []
+        if proj in self.reverseDep:
+            return self.reverseDep[proj]
 
-    def getTraverseList(self, proj, Dict):
-        if proj in Dict:
-            return Dict[proj]
-        return []
+        for key in self.dictDepends.keys():
+            if proj in self.dictDepends[key]:
+                reverseList.append(key)
+        self.reverseDep[proj] = reverseList
+
+        return reverseList
 
     def getTraverseDep(self, proj):
-        return self.getTraverseList(proj, self.dict)
+        if proj in self.dictDepends:
+            return self.dictDepends[proj]
+        return []
 
     def getDepProjList(self, proj):
         # -r : Expand project dependency list reversely.
@@ -205,22 +280,38 @@ def replaceVariableInDictSection(dictDepends, variable, projsToReplace):
             listDepProj.remove(variable)
 
 
-def is64BitPlatform(platform):
-    listPlatform64 = ['x64', 'bromolow', 'cedarview', 'avoton',
-                      'bromolowESM', 'baytrail', 'dockerx64']
-    if platform in listPlatform64:
-        return True
-    else:
-        return False
+# Replace ${XXXX} in dependency list by [${XXXX}] section
+def replacePlatformDependsVariable(dictDepends, platforms, config):
+    def replaceVariableWithSection(variable, section_name):
+        try:
+            dictSection = config.get_section_dict(section_name)
+        except KeyError:
+            print("No such section:" + variable)
+
+        listPlatformDependsProj = findPlatformDependsProj(dictSection, platforms)
+        replaceVariableInDictSection(dictDepends, variable, listPlatformDependsProj)
+
+    if not config.dynamic_variables:
+        # for old project depends compatibility
+        replaceVariableWithSection("${KernelProjs}", pythonutils.SECTION_KERNEL_OLD)
+        return
+    for variable in config.dynamic_variables:
+        replaceVariableWithSection(variable, variable)
 
 
 def ParseArgs():
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', dest='display', action='store_true', help='Display (deprecated)')
     parser.add_argument('-p', dest='platform', type=str, help='Platform')
-    parser.add_argument('-r', dest='r_level',  type=int, default=-1, help='Reverse depenedency traverse level')
-    parser.add_argument('-x', dest='level',    type=int, default=-1, help="Traverse level")
+    parser.add_argument('-r', dest='r_level', type=int, default=-1, help='Reverse depenedency traverse level')
+    parser.add_argument('-x', dest='level', type=int, default=-1, help="Traverse level")
     parser.add_argument('--header', dest='dump_header', default=False, action='store_true', help="Output kernel header")
+    parser.add_argument('--dump', dest='dump_pickle', help="Dump project depends graph into pickle file.")
+
+    group = parser.add_argument_group('Cache')
+    group.add_argument('--version', type=int, default=0)
+    group.add_argument('--type', choices=['tag', 'dep', 'both'], default='both')
+
     parser.add_argument('listProj', nargs='*', type=str, help='Replace project list')
     return parser.parse_args()
 
@@ -229,11 +320,14 @@ def loadConfigFiles(config):
     dictDepends = config.project_depends
 
     confList = glob.glob(ScriptDir + "/../source/*/SynoBuildConf/depends*")
+    confList = [conf for conf in confList if re.search(r'^depends(-virtual-[-.\w]+)*$', os.path.basename(conf))]
     for confPath in confList:
         project = confPath.split('/')[-3]
         filename = confPath.split('/')[-1]
         if BuildEnv.isVirtualProject(filename):
-            project = BuildEnv.deVirtual(project) + BuildEnv.VIRTUAL_PROJECT_SEPARATOR + BuildEnv.getVirtualName(filename)
+            project = BuildEnv.deVirtual(project) + \
+                BuildEnv.VIRTUAL_PROJECT_SEPARATOR + \
+                BuildEnv.getVirtualName(filename)
 
         if os.path.isfile(confPath):
             depends = DependsParser(confPath)
@@ -243,6 +337,7 @@ def loadConfigFiles(config):
             dictDepends[project] = list(set(dictDepends[project] + depends.build_tag))
 
     return dictDepends
+
 
 # main procedure
 if __name__ == "__main__":
@@ -258,10 +353,11 @@ if __name__ == "__main__":
 
     dictArgs = ParseArgs()
 
-    if dictArgs.level >= 0 and dictArgs.r_level >= 0:
-        raise RuntimeError("Error! x and r can not use simultaneously")
     if dictArgs.platform:
         platforms = dictArgs.platform.strip().split(" ")
+
+    if dictArgs.level >= 0 and dictArgs.r_level >= 0:
+        raise RuntimeError("Error! x and r can not use simultaneously")
     if dictArgs.level >= 0:
         level = dictArgs.level
     elif dictArgs.r_level >= 0:
@@ -283,8 +379,15 @@ if __name__ == "__main__":
         dictDepGraph = {}
         blAddKernelHeader, normalizedProjList = normalizeProjects(listProjs, config, kernels)
         replaceVariableSection(config, dictDepends)
-        depGraph = DepGraph(dictDepends, level, direct)
-        listOut = depGraph.traverseDepends(normalizedProjList)
+        replacePlatformDependsVariable(dictDepends, platforms, config)
+
+        depGraph = DepGraph(dictDepends, direct)
+        listOut = depGraph.traverseDepends(normalizedProjList, level)
+        if dictArgs.dump_pickle:
+            sys.setrecursionlimit(3000)
+            with open(dictArgs.dump_pickle, 'wb') as fd:
+                pickle.dump(depGraph, fd)
+            sys.exit(0)
 
         # reorder need filter while args not contain 'x' and 'r'
         if dictArgs.level == -1 and dictArgs.r_level == -1:

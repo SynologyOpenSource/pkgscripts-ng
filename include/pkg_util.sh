@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (c) 2000-2016 Synology Inc. All rights reserved.
+# Copyright (c) 2000-2020 Synology Inc. All rights reserved.
 
 pkg_warn() {
 	local ret=$?
@@ -13,59 +13,24 @@ pkg_log() {
 	return $ret
 }
 
-get_var_from_envmak() {
-	local var="$1"
-	shift
-	local envmaks="$@"
-	local ret=
-	local defaultSearchPath="/env.mak /env32.mak"
-
-	for f in "${envmaks[@]}" $defaultSearchPath; do
-		if [ ! -r "$f" ]; then
-			continue
-		fi
-
-		ret=$(grep "^$var=" "$f" | cut -d= -f2)
-
-		if [ -n "$ret" ]; then
-			break
-		fi
-	done
-
-	if [ -z "$ret" ]; then
-		pkg_warn "get_var_from_envmak: can not extract $var from '[$envmaks $defaultSearchPath]'"
-		return 1
-	else
-		echo "$ret"
-	fi
-}
-
-pkg_get_platform() { # [path of env.mak (default: /env.mak)]
-	# @see synopkg/lib/pkgtool.cpp:77: gSystemArchMapping
+pkg_get_platform() {
 	local arch=
+	declare -f AskPlatform &>/dev/null || . /pkgscripts/include/platforms
+	declare -f AskPlatform &>/dev/null || . /pkgscripts/include/check
+	declare -f AskPlatform &>/dev/null || return 1
 
-	local PLATFORM_ABBR=$(get_var_from_envmak PLATFORM_ABBR "$1" 2> /dev/null) || return 1
-	if [ -n "$PLATFORM_ABBR" ]; then
-		case "$PLATFORM_ABBR" in
-			6281)		arch="88f6281" ;;
-			x64)		arch="x86" ;;
-			*)		arch="$PLATFORM_ABBR" ;;
-		esac
-	fi
+	local abbr=$(AskPlatform && echo $PLATFORM_ABBR)
+	local buildTarget=$(AskPlatform && echo $BUILD_TARGET)
+
+
 	if [ -z "$arch" ]; then
-		local SYNO_PLATFORM=$(get_var_from_envmak SYNO_PLATFORM "$1") || return 1
-		case "$SYNO_PLATFORM" in
-			MARVELL_88F6281)	arch="88f6281" ;;
-			PPC_QORIQ)		arch="qoriq" ;;
-			X64)			arch="x86" ;;
+		case "$buildTarget" in
 			BROMOLOW)		arch="bromolow" ;;
-			BROADWELLNK)		arch="broadwellnk" ;;
-			DENVERTON)		arch="denverton" ;;
-			REALTEK_RTD1296)        arch="rtd1296" ;;
-			APOLLOLAKE)		arch="apollolake" ;;
+			GRANTLEY)		arch="grantley" ;;
 			CEDARVIEW)		arch="cedarview" ;;
 			AVOTON)			arch="avoton" ;;
-			BRASWELL)		arch="braswell" ;;
+			BRASWELL)			arch="braswell" ;;
+			APOLLOLAKE)			arch="apollolake" ;;
 			MARVELL_ARMADAXP)	arch="armadaxp" ;;
 			MARVELL_ARMADA370)	arch="armada370" ;;
 			MARVELL_ARMADA375)	arch="armada375" ;;
@@ -73,37 +38,22 @@ pkg_get_platform() { # [path of env.mak (default: /env.mak)]
 			MINDSPEED_COMCERTO2K)	arch="comcerto2k" ;;
 			ALPINE)			arch="alpine" ;;
 			STM_MONACO)             arch="monaco" ;;
-			MARVELL_ARMADA38X)      arch="armada38x" ;;
-			MARVELL_ARMADA37XX)     arch="armada37xx" ;;
-			HISILICON_HI3535)       arch="hi3535" ;;
 			BROADWELL)		arch="broadwell" ;;
-			KVMX64)			arch="kvmx64" ;;
-			GRANTLEY)		arch="grantley" ;;
-			DOCKERX64)		arch="dockerx64" ;;
+			BROADWELLNK)		arch="broadwellnk" ;;
+			KVMX64)		arch="kvmx64" ;;
+			MARVELL_ARMADA38X)      arch="armada38x" ;;
+			REALTEK_RTD1296)        arch="rtd1296" ;;
+			DENVERTON)		arch="denverton" ;;
+			MARVELL_ARMADA37XX)     arch="armada37xx" ;;
+			PURLEY)               	arch="purley" ;;
+			GEMINILAKE)			arch="geminilake" ;;
+			V1000)                  arch="v1000" ;;
 			*)			arch="" ;;
 		esac
 	fi
 
+	[ -z "$arch" ] && { echo "[ERROR] cannot get platform arch" && exit 1; }
 	echo "$arch"
-}
-
-plat_to_unified_plat() {
-	local plat="$1"
-	local unified_plat=
-
-	case "$plat" in
-		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley | denverton | apollolake | broadwellnk)
-			unified_plat="x86 bromolow cedarview avoton braswell broadwell dockerx64 kvmx64 grantley denverton apollolake broadwellnk"
-			;;
-		# alpine and alpine4k use same define.
-		alpine | alpine4k )
-			unified_plat="alpine alpine4k"
-			;;
-		*)
-			unified_plat="$plat"
-			;;
-	esac
-	echo "$unified_plat"
 }
 
 plat_to_family() {
@@ -111,7 +61,7 @@ plat_to_family() {
 	local family=
 
 	case "$plat" in
-		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley | denverton | apollolake | broadwellnk)
+		bromolow | cedarview | avoton | braswell | apollolake | grantley | broadwell | kvmx64 | denverton | broadwellnk  | purley | geminilake | v1000 )
 			family="x86_64"
 			;;
 		evansport )
@@ -120,17 +70,11 @@ plat_to_family() {
 		alpine | alpine4k )
 			family="armv7"
 			;;
-		88f6281 )
-			family="armv5"
-			;;
-		qoriq )
-			family="ppc"
-			;;
-		rtd1296 | armada37xx)
+		rtd1296 | armada37xx )
 			family="armv8"
 			;;
 		# armv7 not ready platforms.
-		comcerto2k | armada370 | armada375 | armadaxp | monaco | armada38x | hi3535)
+		comcerto2k | armada370 | armada375 | armadaxp | monaco | armada38x | rtd1296 )
 			family="$plat"
 			;;
 		*)
@@ -142,149 +86,121 @@ plat_to_family() {
 	return 0
 }
 
-pkg_get_unified_platform() { # [path of env.mak (default: /env.mak)]
-	# @see synopkg/lib/pkgtool.cpp:77: gSystemArchMapping
-	local plat=$(pkg_get_platform "$1") || return 1
-
-	plat_to_unified_plat "$plat"
-}
-
-pkg_get_platform_family() { # [path of env.mak (default: /env.mak)]
-	# @see synopkg/lib/pkgtool.cpp:77: gSystemArchMapping
-	local plat=$(pkg_get_platform "$1") || return 1
+pkg_get_platform_family() {
+	local plat=$(pkg_get_platform) || return 1
 
 	plat_to_family "$plat"
 }
 
-pkg_get_spk_platform() { # [path of env.mak (default: /env.mak)]
-	# @see synopkg/lib/pkgtool.cpp:77: gSystemArchMapping
-	local plat=$(pkg_get_platform "$1") || return 1
-	local spk_plat=
-	case "$plat" in
-		88f6281)
-			spk_plat="88f628x"
-			;;
-		*)
-			spk_plat="$plat"
-			;;
-	esac
-	echo "$spk_plat"
+pkg_get_spk_platform() {
+	local plat=$(pkg_get_platform) || return 1
+	echo "$plat"
 }
 
-pkg_get_product_name() {
-	local platform=$arch
-	product_name="Synology NAS"
-	echo "$product_name"
-}
-
-pkg_get_os_name() {
-	local platform=$arch
-	case "$platform" in
-		*)
-			os_name="DSM"
-			;;
-	esac
-	echo "$os_name"
-}
-
-pkg_get_string() {
-	local file="$1"
-	local sec="$2"
-	local key="$3"
-	local text="$(sed -n '/^\['$sec'\]/,/^'$key'/s/'$key'.*=[^"]*"\(.*\)"/\1/p' "$file")"
-	local product_name_original="_DISKSTATION_"
-	local product_name=$(pkg_get_product_name)
-	local os_name_original="_OSNAME_"
-	local os_name=$(pkg_get_os_name)
-	local idx=0
-
-	shift 3
-	for val in "$@"; do
-		text="${text/\{$idx\}/$val}"
-		let idx=1+$idx
+# Run *.sh under $1 to create scripts; e.g. scripts or WIZARD_UIFILES
+pkg_create_scripts() {
+	[ ! -d "$1" ] && return
+	local exe= prefix= list=
+	cd $1
+	for exe in `ls *.sh`; do
+		sh $exe
+		prefix=`echo $exe | sed 's/.sh$//'`
+		list="$list $1/$prefix $1/${prefix}_*"
 	done
-
-	echo "$text" | sed -e "s/${product_name_original}/${product_name}/g" | sed -e "s/${os_name_original}/${os_name}/g"
+	cd - > /dev/null
+	echo "$list"
 }
 
-pkg_get_spk_unified_platform() { # [path of env.mak (default: /env.mak)]
-	# @see synopkg/lib/pkgtool.cpp:77: gSystemArchMapping
-	local plat=$(pkg_get_platform "$1") || return 1
-	local spk_unified_platform=
+check_bash_ver_ge_4() {
+	if [ ${BASH_VERSION:0:1} -ge 4 ]; then
+		return 1
+	else
+		return 0
+	fi
+}
 
-	case "$plat" in
-		88f6281)
-			spk_unified_platform="88f628x"
+check_deprecate() {
+	declare -A key_map=(["os_min_ver"]="firmware")
+	local key=$1
+	# Check whether necessary have deprecated key
+	case $key in
+		os_min_ver)
+			echo "Warning: Exist deprecated key \"${key_map[$key]}\" for \"$key\" after version 6.1-14715" >&2
+			deprecate_key=${key_map[$key]}
+			return 1
 			;;
-		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley | denverton | apollolake | broadwellnk)
-			spk_unified_platform="x64"
-			;;
-		alpine | alpine4k )
-			spk_unified_platform="alpine"
-			;;
-		*)
-			spk_unified_platform="$plat"
-			;;
+		*) return 0
 	esac
-	echo "$spk_unified_platform"
+}
+
+check_necessary_field() {
+	# $1: necessary keys in map structure
+	# $2: retrieved keys in map structure
+	local -n nec_map=$1
+	local -n key_map=$2
+
+	for key in ${!nec_map[@]}; do
+		if [ ${nec_map[$key]} -eq 0 ]; then
+			if [ ! -z ${!key+x} ]; then
+				# necessary fields are not defined in INFO.sh
+				# e.g. maintainer in pkg_init_info
+				echo "$key=\"${!key}\""
+			else
+				check_deprecate $key
+				local ret_val=$?
+				if [ $ret_val -eq 0 ]; then
+					echo "Error: Found unspecified necessary field \"$key\" without deprecated key" >&2
+				else
+					local deprecate_is_written=false
+					for key_read in ${!key_map[@]}; do
+						# Check whether we have retrieved keys that are deprecated keys
+						if [ $key_read == $deprecate_key ] && [ ! -z ${!key_read+x} ]; then
+							deprecate_is_written=true
+							echo "Warning: Found specified deprecated key for \"$key\"" >&2
+							break
+						fi
+					done
+					if ! $deprecate_is_written; then
+						echo "Error: Found unspecified necessary field \"$key\" without specified deprecated key" >&2
+					fi
+				fi
+			fi
+		fi
+	done
 }
 
 pkg_dump_info() {
-	local fields="package version maintainer maintainer_url distributor distributor_url arch exclude_arch model
-		adminprotocol adminurl adminport firmware dsmuidir dsmappname checkport allow_altport
-		startable helpurl report_url support_center
-		install_reboot install_dep_packages install_conflict_packages install_dep_services
-		install_break_packages instuninst_restart_services install_type install_replace_packages
-		startstop_restart_services start_dep_services silent_install silent_upgrade silent_uninstall
-		checksum package_icon package_icon_120 package_icon_128 package_icon_144 package_icon_256
-		thirdparty support_conf_folder log_collector
-		support_aaprofile auto_upgrade_from offline_install precheckstartstop description displayname
-		beta ctl_stop ctl_uninstall os_max_ver os_min_ver"
-	local langs="enu cht chs krn ger fre ita spn jpn dan nor sve nld rus plk ptb ptg hun trk csy"
-	local f= lan= file= sec= key=
+	local fields="package version maintainer maintainer_url distributor distributor_url arch exclude_arch model exclude_model
+		adminprotocol adminurl adminport firmware dsmuidir dsmappname dsmapppage dsmapplaunchname checkport allow_altport
+		startable helpurl report_url support_center install_reboot install_dep_packages install_conflict_packages install_dep_services
+		instuninst_restart_services startstop_restart_services start_dep_services silent_install silent_upgrade silent_uninstall install_type
+		checksum package_icon package_icon_120 package_icon_128 package_icon_144 package_icon_256 thirdparty support_conf_folder
+		auto_upgrade_from offline_install precheckstartstop os_min_ver os_max_ver beta ctl_stop ctl_install ctl_uninstall
+		install_break_packages install_replace_packages use_deprecated_replace_mechanism"
+	local f=
 
 	for f in $fields; do
 		if [ -n "${!f}" ]; then
 			echo $f=\"${!f}\"
 		fi
 	done
-
-	for lang in $langs; do
-		description="description_${lang}"
-		if [ -n "${!description}" ]; then
-			echo "${description}=\"${!description}\""
-		fi
-		displayname="displayname_${lang}"
-		if [ -n "${!displayname}" ]; then
-			echo "${displayname}=\"${!displayname}\""
-		fi
-	done
-}
-
-pkg_get_tar_option() {
-	local version_file="/PkgVersion"
-
-	echo "cJf"
 }
 
 pkg_make_package() { # <source path> <dest path>
-	pkg_make_inner_tarball $@
-}
-pkg_make_inner_tarball() { # <source path> <dest path>
 	local source_path=$1
 	local dest_path=$2
 	local package_name="package.tgz"
 	local temp_extractsize="extractsize_tmp"
 	local pkg_size=
-	local tar_option="$(pkg_get_tar_option)"
+	local tar_option="cJf"
 
 	# check parameters
 	if [ -z "$source_path" -o ! -d "$source_path" ]; then
-		pkg_warn "pkg_make_inner_tarball: bad parameters, please set source dir"
+		pkg_warn "pkg_make_package: bad parameters, please set source dir"
 		return 1
 	fi
 	if [ -z "$dest_path"  -o ! -d "$dest_path" ]; then
-		pkg_warn "pkg_make_inner_tarball: bad parameters, please set destination dir"
+		pkg_warn "pkg_make_package: bad parameters, please set destination dir"
 		return 1
 	fi
 
@@ -337,10 +253,6 @@ pkg_get_spk_name() { #<info path> [package name]
 	__get_spk_name pkg_get_spk_platform $@
 }
 
-pkg_get_spk_unified_name() { #<info path> [package name]
-	__get_spk_name pkg_get_spk_unified_platform $@
-}
-
 pkg_get_spk_family_name() { #<info path> [package name]
 	__get_spk_name pkg_get_platform_family $@
 }
@@ -372,10 +284,10 @@ pkg_make_spk() { # <source path> <dest path> <spk file name>
 	spk_name=${3:-`pkg_get_spk_name $info_path`}
 	# add extractsize to INFO
 	pkg_size=`cat $source_path/$temp_extractsize`
-	echo "extractsize=${pkg_size}" >> $info_path
+	echo "extractsize=\"${pkg_size}\"" >> $info_path
 	rm "$source_path/$temp_extractsize"
 
-	echo toolkit_version=$DSM_BUILD_NUM >> $info_path
+	echo "toolkit_version=\"$DSM_BUILD_NUM\"" >> $info_path
 	echo "create_time=\"$(date +%Y%m%d-%T)\"" >> $info_path
 
 	# tar .spk file

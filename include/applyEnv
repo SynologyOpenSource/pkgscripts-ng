@@ -1,12 +1,12 @@
 #!/bin/bash
-# Copyright (c) 2000-2016 Synology Inc. All rights reserved.
+# Copyright (c) 2000-2020 Synology Inc. All rights reserved.
 
 if [ -z "$__INCLUDE_APPLY_ENV__" ]; then
 __INCLUDE_APPLY_ENV__=defined
 
-Source "include/check"
+Source include/check
 
-FunCreateCCacheWrap() # {{{
+FunCreateCCacheWrap()
 {
 	for bin in $*
 	do
@@ -26,6 +26,7 @@ _ApplyEnvDir() {
 	SynoBinDir="$SynoDir/bin"
 	SynoIncludeDir="$SynoDir/include"
 	SynoShareDir="$SynoDir/share"
+	SynoPluginDir="$SynoDir/plugin"
 	LibDir="/usr/lib"
 	BinDir="/usr/bin"
 	IncludeDir="/usr/include"
@@ -40,12 +41,10 @@ _ApplyEnvDir() {
 	KSP="$KERNEL_SEARCH_PATH"
 	KSRC="$KERNEL_SEARCH_PATH"
 	KDIR="$KERNEL_SEARCH_PATH"
-
 }
 
 _ApplyBuildFlag() {
 	local arch="$1"
-	local phase="`GetBuildPhase $VERSION_FILE`"
 
 	_AssignArch "ToolChainDir" $arch
 	_AssignArch "ToolChainPrefix" $arch
@@ -62,26 +61,15 @@ _ApplyBuildFlag() {
 	_AssignArch "CXX" $arch
 	_AssignArch "LD" $arch
 	_AssignArch "AR" $arch
-	_AssignArch "STRIP" $arch
+
+	eval "STRIP_ORI=\$STRIP$arch"
+	SSTRIP="/usr/syno/bin/sstrip"
 
 	_AssignArch "RANLIB" $arch
 	_AssignArch "CFLAGS" $arch
 	_AssignArch "LDFLAGS" $arch
 	_AssignArch "NM" $arch
 	_AssignArch "READELF" $arch
-
-	_AssignArch "StaticDir" $arch
-	_AssignArch "StaticPrefix" $arch
-	_AssignArch "StaticLib" $arch
-	_AssignArch "StaticInclude" $arch
-	_AssignArch "STATIC_CFLAGS" $arch
-	_AssignArch "STATIC_LDFLAGS" $arch
-	_AssignArch "STATIC_CC" $arch
-	_AssignArch "STATIC_LD" $arch
-	_AssignArch "STATIC_AR" $arch
-	_AssignArch "STATIC_STRIP" $arch
-	_AssignArch "STATIC_RANLIB" $arch
-	_AssignArch "STATIC_NM" $arch
 
 	#For Grub in EFI framework
 	_AssignArch "GrubHOST" $arch
@@ -105,6 +93,8 @@ _ApplyBuildFlag() {
 
 ApplyBuildEnv() {
 	local arch="$1"
+	local proj="$2"
+
 	_ApplyBuildFlag "${arch}"
 	_ApplyEnvDir "build"
 
@@ -118,34 +108,42 @@ ApplyBuildEnv() {
 
 	CC="${ToolChainPrefix}ccache-gcc"
 	CXX="${ToolChainPrefix}ccache-g++"
-	[ -n "$StaticPrefix" ] && STATIC_CC="${StaticPrefix}ccache-gcc"
-
+	if [ -n "$StaticPrefix" ]; then
+		STATIC_CC="${StaticPrefix}ccache-gcc"
+	fi
 	if [ -n "${GrubToolChainPrefix}" ]; then
 		GrubCC="${GrubToolChainPrefix}ccache-gcc"
 		GrubCXX="${GrubToolChainPrefix}ccache-g++"
 	fi
+
 	FunCreateCCacheWrap "${CC}" "${CXX}" "${STATIC_CC}" "${GrubCC}" "${GrubCXX}" /usr/bin/ccache-gcc /usr/bin/ccache-g++
 
-	CFLAGS="$CFLAGS -DBUILD_ARCH=${arch} -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64 -DSYNO_PLATFORM=${BUILD_TARGET}"
+	CFLAGS="$CFLAGS -DBUILD_ARCH=${arch} -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64"
 	if [ -n "$SYNO_XTRACFLAGS" ]; then
 		CFLAGS="${CFLAGS} ${SYNO_XTRACFLAGS}"
-		STATIC_CFLAGS="${STATIC_CFLAGS} ${SYNO_XTRACFLAGS}"
 	fi
 
-	InstallDevLayout="prefix=/usr PREFIX=/usr libdir=/usr/lib LIBDIR=/usr/lib bindir=/usr/bin BINDIR=/usr/bin includedir=/usr/include INCLUDEDIR=/usr/include DESTDIR=${DebDevDir}"
+	InstallDevLayout="prefix=/usr PREFIX=/usr libdir=/usr/lib LIBDIR=/usr/lib bindir=/usr/bin BINDIR=/usr/bin includedir=/usr/include INCLUDEDIR=/usr/include DESTDIR=${DebDevDir} FILESDIR=${DebFilesRootDir}/${proj} SYNODOCDIR=/usr/include/synodoc"
 
-	CXXFLAGS="${CFLAGS}"
+	CFLAGS="$CFLAGS $PLAT_FLAGS -DSYNO_PLATFORM=${BUILD_TARGET}"
+	CXXFLAGS="${CFLAGS} ${CXXSTANDARD}"
+	GOROOT="/usr/lib/go"
 }
 
 ApplyInstallEnv() {
 	local InstallArch="$1"
+	local proj="$2"
 
 	export BUILD_ARCH="${InstallArch}"
 	_ApplyBuildFlag "${InstallArch}"
 	_ApplyEnvDir "install"
 	export PATH="/bin:/sbin:/usr/bin:/usr/syno/bin:${SysRootBin}"
 
-	SynoInstallLayout="prefix=/usr/syno PREFIX=/usr/syno libdir=/usr/lib LIBDIR=/usr/lib bindir=/usr/syno/bin BINDIR=/usr/syno/bin includedir=/usr/syno/include INCLUDEDIR=/usr/syno/include DESTDIR=${TmpInstDir}"
+	SynoInstallLayout="prefix=/usr/syno PREFIX=/usr/syno libdir=/usr/lib LIBDIR=/usr/lib bindir=/usr/syno/bin BINDIR=/usr/syno/bin includedir=/usr/syno/include INCLUDEDIR=/usr/syno/include FILESDIR=${FilesDir}/${proj} PLUGINDIR=${SynoPluginDir} DESTDIR=${TmpInstDir}"
+
+	CFLAGS="$CFLAGS $PLAT_FLAGS -DSYNO_PLATFORM=${BUILD_TARGET}"
+	CXXFLAGS="${CFLAGS} ${CXXSTANDARD}"
+	GOROOT="/usr/lib/go"
 }
 
 fi

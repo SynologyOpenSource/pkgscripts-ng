@@ -1,17 +1,17 @@
-ToolChainDir32="/usr/local/aarch64-unknown-linux-gnueabi"
-ToolChainPrefix32="${ToolChainDir32}/bin/aarch64-unknown-linux-gnueabi-"
+ToolChainDir32="/usr/local/aarch64-unknown-linux-gnu"
+ToolChainPrefix32="${ToolChainDir32}/bin/aarch64-unknown-linux-gnu-"
 ToolChainBin32="${ToolChainDir32}/bin"
-ToolChainSysRoot32="${ToolChainDir32}/aarch64-unknown-linux-gnueabi/sysroot"
+ToolChainSysRoot32="${ToolChainDir32}/aarch64-unknown-linux-gnu/sysroot"
 ToolChainInclude32="${ToolChainSysRoot32}/usr/include"
 ToolChainLib32="${ToolChainSysRoot32}/lib"
 
 ARCH="arm64"
 PLATFORM_FAMILY="SYNOPLAT_F_ARMV8"
 
-ConfigOpt32="--host=aarch64-unknown-linux-gnueabi --target=aarch64-unknown-linux-gnueabi --build=x86_64-build_pc-linux-gnu"
+ConfigOpt32="--host=aarch64-unknown-linux-gnu --target=aarch64-unknown-linux-gnu --build=x86_64-build_pc-linux-gnu"
 
 # For sdk usbcam
-HOST32=aarch64-unknown-linux-gnueabi/
+HOST32=aarch64-unknown-linux-gnu/
 
 PLAT_FLAGS="-DSYNO_MARVELL_ARMADA37XX"
 CFLAGS32="-I${ToolChainInclude32} -D$PLATFORM_FAMILY -O2 -mcpu=cortex-a53 -march=armv8-a -fno-diagnostics-show-caret -Wno-unused-local-typedefs"
@@ -26,18 +26,18 @@ NM32=${ToolChainPrefix32}nm
 READELF32=${ToolChainPrefix32}readelf
 
 
-ToolChainDir64="/usr/local/aarch64-unknown-linux-gnueabi"
-ToolChainPrefix64="${ToolChainDir64}/bin/aarch64-unknown-linux-gnueabi-"
+ToolChainDir64="/usr/local/aarch64-unknown-linux-gnu"
+ToolChainPrefix64="${ToolChainDir64}/bin/aarch64-unknown-linux-gnu-"
 ToolChainBin64="${ToolChainDir64}/bin"
-ToolChainInclude64="${ToolChainDir64}/aarch64-unknown-linux-gnueabi/sys-root/usr/include/"
+ToolChainInclude64="${ToolChainDir64}/aarch64-unknown-linux-gnu/sys-root/usr/include/"
 ToolChainSysInclude64=""
-ToolChainLib64="${ToolChainDir64}/aarch64-unknown-linux-gnueabi/sysroot/lib"
-ToolChainSysRoot64="${ToolChainDir64}/aarch64-unknown-linux-gnueabi/sysroot/"
+ToolChainLib64="${ToolChainDir64}/aarch64-unknown-linux-gnu/sysroot/lib"
+ToolChainSysRoot64="${ToolChainDir64}/aarch64-unknown-linux-gnu/sysroot/"
 
-ConfigOpt64="--host=aarch64-unknown-linux-gnueabi --target=aarch64-unknown-linux-gnueabi --build=x86_64-build_pc-linux-gnu"
+ConfigOpt64="--host=aarch64-unknown-linux-gnu --target=aarch64-unknown-linux-gnu --build=x86_64-build_pc-linux-gnu"
 
 # For sdk usbcam
-HOST64=aarch64-unknown-linux-gnueabi
+HOST64=aarch64-unknown-linux-gnu
 
 CFLAGS64="-D$PLATFORM_FAMILY -O2"
 LDFLAGS64=""
@@ -50,8 +50,9 @@ RANLIB64=${ToolChainPrefix64}ranlib
 NM64=${ToolChainPrefix64}nm
 READELF64=${ToolChainPrefix64}readelf
 
-KernelToolchain="gcc494_glibc220_armv8"
+KernelToolchain="gcc730_glibc226_armv8"
 ToolchainTGZList="$KernelToolchain"
 UBootToolchain="gcc483_glibc219_hard"
 SynoKernelConfig="armada37xx"
 SynoGNUSources="armada37xx"
+QemuStatic="qemu-aarch64-static"

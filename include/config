@@ -1,13 +1,13 @@
 #!/bin/bash
+# Copyright (c) 2000-2020 Synology Inc. All rights reserved.
 
 if [ -z "$__INCLUDE_CONFIG__" ]; then
 __INCLUDE_CONFIG__=defined
 
-if [ -z "$IS_GIT_SERVER" ]; then
-	Source "include/variable"
-fi
+. "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"/init
 
-Source "include/projects"
+Source include/variable
+Source include/projects
 
 fi # header guard
 # vim:ft=sh

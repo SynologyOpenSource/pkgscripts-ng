@@ -1,43 +1,28 @@
-# first part, for project dependency
 [dynamic variable list]
-list="${Kernel} ${Desktop}"
+list="${Kernel}"
 
-[variables]
-${KernelPacks}="synobios"
-
-[project dependency]
-${KernelPacks}="${Kernel}"     # must set here, to connect KernelPacks to KernelProjects
-
-[64bit project dependency]
-
-[${Desktop}]
-default="dsm"
-
-#second part, kernel project for each platform
 [${Kernel}]
-x64="linux-3.10.x"
 bromolow="linux-3.10.x"
 cedarview="linux-3.10.x"
+grantley="linux-3.10.x"
 evansport="linux-3.x"
 avoton="linux-3.10.x"
 braswell="linux-3.10.x"
-6281="linux-2.6.32"
-qoriq="linux-2.6.32"
+apollolake="linux-4.4.x"
+broadwell="linux-4.4.x"
+broadwellnk="linux-4.4.x"
 armadaxp="linux-3.x"
 armada370="linux-3.x"
 armada375="linux-3.x"
 comcerto2k="linux-3.x"
 alpine="linux-3.10.x-bsp"
 alpine4k="linux-3.10.x-bsp"
-monaco="linux-3.10.x-bsp"
-armada38x="linux-3.10.x-bsp"
-hi3535="linux-3.4.x"
-broadwell="linux-3.10.x"
-dockerx64="linux-3.10.x"
 kvmx64="linux-4.4.x"
-grantley="linux-3.10.x"
-denverton="linux-4.4.x"
-apollolake="linux-4.4.x"
+monaco="linux-3.10.x-bsp"
 rtd1296="linux-4.4.x"
+armada38x="linux-3.10.x-bsp"
+denverton="linux-4.4.x"
+purley="linux-4.4.x"
 armada37xx="linux-4.4.x"
-broadwellnk="linux-4.4.x"
+geminilake="linux-4.4.x"
+v1000="linux-4.4.x"

@@ -1,0 +1,31 @@
+ToolChainDir32="/usr/local/arm-unknown-linux-gnueabi"
+ToolChainPrefix32="${ToolChainDir32}/bin/arm-unknown-linux-gnueabi-"
+ToolChainBin32="${ToolChainDir32}/bin"
+ToolChainSysRoot32="${ToolChainDir32}/arm-unknown-linux-gnueabi/sysroot"
+ToolChainInclude32="${ToolChainSysRoot32}/usr/include"
+ToolChainLib32="${ToolChainSysRoot32}/lib"
+ARCH="arm"
+PLATFORM_FAMILY="SYNOPLAT_F_ARMV7"
+
+ConfigOpt32="--host=armle-unknown-linux --target=armle-unknown-linux --build=i686-pc-linux"
+HOST32=arm-unknown-linux-gnueabi
+
+PLAT_FLAGS="-DSYNO_HISILICON_HI3536"
+CFLAGS32="-march=armv7-a -mfloat-abi=softfp -mfpu=neon-vfpv4 -DSYNO_HISILICON_HI3536 -D$PLATFORM_FAMILY -O2 -mno-unaligned-access -fno-aggressive-loop-optimizations"
+LDFLAGS32=""
+CC32=${ToolChainPrefix32}gcc
+CXX32=${ToolChainPrefix32}g++
+LD32=${ToolChainPrefix32}ld
+AR32=${ToolChainPrefix32}ar
+STRIP32=${ToolChainPrefix32}strip
+RANLIB32=${ToolChainPrefix32}ranlib
+NM32=${ToolChainPrefix32}nm
+READELF32=${ToolChainPrefix32}readelf
+
+KernelToolchain="gcc493_glibc220_softfp"
+ToolchainTGZList="$KernelToolchain"
+SynoKernelConfig="hi3536"
+SynoGNUSources="hi3536"
+QemuStatic="qemu-arm-static"
+
+BRINGUP_VERSION=6.1

@@ -1,0 +1,32 @@
+#!/bin/bash
+# Copyright (c) 2000-2020 Synology Inc. All rights reserved.
+
+if [ -z "$__INCLUDE_UTIL__" ]; then
+__INCLUDE_UTIL__=defined
+
+Source include/init
+Source include/check
+
+# Show time cost information by simple api
+# TimeCost command [command_option ...]
+TimeCost() {
+	local ret
+	local start=$(date +%s)
+	"$@"
+	ret="$?"
+	local end=$(date +%s)
+	ShowTimeCost "$start" "$end" "$*"
+	return "$ret"
+}
+
+# Auto detect CPU count
+DetectCPUCount() {
+	local JOBS="$(grep -c ^processor /proc/cpuinfo)"
+	if [ "$JOBS" -lt 2 ]; then
+		JOBS=2
+	fi
+	echo $JOBS
+}
+
+fi
+# vim:ft=sh

@@ -11,7 +11,8 @@ ConfigOpt32="--host=powerpc-unknown-linux --target=powerpc-unknown-linux --build
 # For sdk usbcam
 HOST32=powerpc-unknown-linux
 
-CFLAGS32="-mcpu=8548 -mhard-float -mfloat-gprs=double -D$PLATFORM_FAMILY -DSYNO_PPC_QORIQ -O2"
+PLAT_FLAGS="-DSYNO_PPC_QORIQ"
+CFLAGS32="-mcpu=8548 -mhard-float -mfloat-gprs=double -D$PLATFORM_FAMILY -O2"
 LDFLAGS32=""
 CC32=${ToolChainPrefix32}gcc
 CXX32=${ToolChainPrefix32}g++
@@ -26,7 +27,7 @@ StaticDir32="/usr/ppc10xx-linux-uclibc"
 StaticPrefix32="/usr/ppc10xx-linux-uclibc/bin/powerpc-uclibc-"
 StaticInclude32="/usr/ppc10xx-linux-uclibc/include"
 StaticLib32="/usr/ppc10xx-linux-uclibc/lib"
-STATIC_CFLAGS32="-I${StaticInclude32} -D$PLATFORM_FAMILY -DSYNO_PPC_QORIQ"
+STATIC_CFLAGS32="-I${StaticInclude32} -D$PLATFORM_FAMILY"
 STATIC_LDFLAGS32="-L/usr/ppc10xx-linux-uclibc/lib"
 STATIC_CC32=${StaticPrefix32}gcc
 STATIC_LD32=${StaticPrefix32}ld

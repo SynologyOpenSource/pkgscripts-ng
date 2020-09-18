@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+# Copyright (c) 2000-2020 Synology Inc. All rights reserved.
 
 class cache(dict):
     def __init__(self, func):

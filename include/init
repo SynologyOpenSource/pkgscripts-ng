@@ -1,15 +1,27 @@
 #!/bin/bash
-# Copyright (c) 2000-2016 Synology Inc. All rights reserved.
+# Copyright (c) 2000-2020 Synology Inc. All rights reserved.
 
 if [ -z "$__INCLUDE_INIT__" ]; then
 __INCLUDE_INIT__=defined
 
 CurDir=$(pwd)
-ScriptsDir=$(dirname $(readlink -f "$0"))
+ScriptsDir=$(dirname $(dirname $(readlink -f "${BASH_SOURCE[0]}")))
 ScriptsDirName=$(basename "$ScriptsDir")
-ScriptsName=$(basename "$0")
 SynoBase=$(dirname "$ScriptsDir")
+BASEDIR="$(dirname "$SynoBase")"
 SourceDir=$SynoBase/source
+
+GetChroot() {
+	local platform="$1"
+
+	echo "$BASEDIR/ds.$platform"
+}
+
+GetChrootSource() {
+	local platform="$1"
+
+	echo "$(GetChroot "$platform")/source"
+}
 
 UsingPkgScripts() {
 	if [ "$ScriptsDirName" = "lnxscripts" ]; then

@@ -1,27 +1,31 @@
 #!/bin/bash
-# Copyright (c) 2000-2016 Synology Inc. All rights reserved.
+# Copyright (c) 2000-2020 Synology Inc. All rights reserved.
 
 if [ -z "$__INCLUDE_BUILD__" ]; then
 __INCLUDE_BUILD__=defined
 
-Source "include/config"
-Source "include/check"
-Source "include/platforms"
-Source "include/check"
-Source "include/applyEnv"
+Source include/parallel
+Source include/parallelbuild
+Source include/config
+Source include/check
+Source include/platforms
+Source include/virtualProject
+Source include/applyEnv
+Source include/util
 
 PlatformOpts=`AllPlatformOptionsComma`
-BuildDefaultArgs="acCNdhx:r:p:jJSgT"
+BuildDefaultArgs="acCNdhx:r:p:j:JSsT"
 BuildDefaultLongArgs="${PlatformOpts}platform:,\
 clean,noclean,cleanonly,dontask,\
 jobs:,without-ccache,with-ccache:,with-clean-ccache,\
 with-debug,help"
 
-MakeSilent="Yes"
+MakeSilent="No"
 MakeJobs="Yes"
 WithCcache="Yes"
 WithCleanCcache="No"
 WithDebug="No"
+BuildAllProject="N"
 
 BUILD_DEP_LEVEL=""
 DEP_OPT=""
@@ -29,6 +33,18 @@ DEP_OPT=""
 CFLAGS=""
 LDFLAGS=""
 
+ParseArgs() {
+	ARGS=$(getopt -u -l "$BuildDefaultLongArgs","$BuildExtraLongArgs" "$BuildDefaultArgs""$BuildExtraArgs" "$@")
+	if [ $? -ne 0 ]; then
+		Usage
+		exit 1
+	fi
+
+	set -- $ARGS
+
+	ParseBuildDefaultArgs $ARGS
+	ParseBuildExtraArgs $UnHandledOpt
+}
 
 # This function will parse default build args
 # InputProjs and UnHandledOpt will be export
@@ -54,10 +70,10 @@ ParseBuildDefaultArgs(){
 			MakeClean="Yes"
 			CleanOnly="Yes"
 			;;
-		"-c" | "--clean" | "--dontask")
+		"-c" | "--clean")
 			MakeClean="Yes"
 			;;
-		"-N" | "--noclean")
+		"-N" | "--noclean" | "--dontask")
 			MakeClean="No"
 			;;
 		"-d" | "--with-debug")
@@ -67,13 +83,10 @@ ParseBuildDefaultArgs(){
 			Usage
 			exit 0
 			;;
-		"-j")
-			MakeJobs="Yes"
-			;;
 		"-J")
 			MakeJobs="No"
 			;;
-		"--jobs")
+		"-j"|"--jobs")
 			JOBS="$2"
 			if [ "$2" -gt 1 ]; then
 				MakeJobs="Yes"
@@ -81,6 +94,9 @@ ParseBuildDefaultArgs(){
 				MakeJobs="No"
 			fi
 			shift
+			;;
+		"-s")
+			MakeSilent="Yes"
 			;;
 		"-S")
 			MakeSilent="No"
@@ -111,9 +127,6 @@ ParseBuildDefaultArgs(){
 				BUILD_DEP_LEVEL="0"		# 0 means to traverse all dependencies
 			fi
 			;;
-		"-T")
-			ENABLE_LTTNG_FLAGS=true
-			;;
 		"--")
 			# remaining are project names
 			shift
@@ -137,10 +150,17 @@ ParseBuildDefaultArgs(){
 	InputProjs=$@
 
 	if [ -z "$BUILD_OPT" ]; then
-		# call again without parameters 
+		# call again without parameters
 		# to prompt user interactively
 		AskPlatform
 	fi
+}
+
+GetConflictProjects() {
+	local proj="$1"
+	local conf=$(FindConflictConf "$proj" "conflict")
+
+	[ -f "$conf" ] && grep "^$proj=" "$conf" | cut -d\" -f2
 }
 
 NormalizeBuildProjects() {
@@ -160,10 +180,6 @@ NormalizeBuildProjects() {
 		CheckErrorOut 2 "You have to specify at least one poject name."
 	fi
 
-	if ! projList=$(${ScriptsDir}/ProjectDepends.py ${DEP_OPT} ${BUILD_DEP_LEVEL} -p "${PLATFORM_ABBR}" ${projList}) ; then
-		CheckErrorOut 1 "Failed to get dependency list !!"
-	fi
-
 	if [ -z "${projList}" ]; then
 		CheckErrorOut 2 "No Project actually needed to be built."
 	fi
@@ -172,13 +188,13 @@ NormalizeBuildProjects() {
 	return 0
 }
 
-ExcludeProjects() {
-	local projList=$@
-	local retProjs=
+ReorderBuildProjects() {
+	if ! projList=$(${ScriptsDir}/ProjectDepends.py ${DEP_OPT} ${BUILD_DEP_LEVEL} -p "${PLATFORM_ABBR}" $*) ; then
+		CheckErrorOut 1 "Failed to get dependency list !!"
+	fi
 
-	retProjs=$(ExcludeList "$projList" "$(getPlatformExcludeProjs)")
-	BuildMachineOnly || retProjs=$(ExcludeList "$retProjs" ".*-virtual-protection dsm-Protection")
-	echo $retProjs
+	echo $projList
+	return 0
 }
 
 CheckCleanSource() {
@@ -205,7 +221,7 @@ SetupBuildEnv() # {{{
 	CheckCleanSource
 
 	export SYNO_PLATFORM="${BUILD_TARGET}"
-	JOBS=${JOBS:-4}
+	[ -z "$JOBS" ] && JOBS=$(DetectCPUCount)
 
 	# Execute build env hook
 	if [ -n "$hook" ] && [ "$(type -t $hook)" = "function" ]; then
@@ -238,14 +254,12 @@ EOF
 WriteEnvToFile() {
 	local file="$1"
 
-	rm $file
+	rm -f "$file"
 
 	# env.mak and env64.mak
 	echo "SOURCE_DIR=$SourceDir" >> $file
 	echo "ToolChainDir=$ToolChainDir" >> $file
 	echo "ToolChainSysRoot=${ToolChainSysRoot}" >> $file
-	echo "PLATFORM_ABBR=$PLATFORM_ABBR" >> $file
-	echo "SYNO_PLATFORM=$SYNO_PLATFORM" >> $file
 	echo "ConfigOpt=\"$ConfigOpt\"" >> $file
 	echo "HOST=$HOST" >> $file
 	echo "ToolChainPrefix=$ToolChainPrefix" >> $file
@@ -255,19 +269,20 @@ WriteEnvToFile() {
 	echo "CFLAGS=$CFLAGS" >> $file
 	echo "CXXFLAGS=$CXXFLAGS" >> $file
 	echo "LDFLAGS=$LDFLAGS" >> $file
-	echo "CC=${ToolChainPrefix}ccache-gcc" >> $file
-	echo "CXX=${ToolChainPrefix}ccache-g++" >> $file
+	echo "CC=$CC" >> $file
+	echo "CXX=$CXX" >> $file
 	echo "LD=$LD" >> $file
 	echo "AR=$AR" >> $file
-	echo "STRIP=$STRIP" >> $file
+	echo "# STRIP is decided by the env.mak." >> $file
 	echo "STRIP_ORI=$STRIP_ORI" >> $file
+	echo "SSTRIP=$SSTRIP" >> $file
 	echo "RANLIB=$RANLIB" >> $file
 	echo "NM=$NM" >> $file
 	echo "READELF=$READELF" >> $file
+
 	echo "DSM_BUILD_NUM=$DSM_BUILD_NUM" >> $file
 	echo "DSM_SHLIB_MAJOR=$DSM_SHLIB_MAJOR" >> $file
 	echo "DSM_SHLIB_MINOR=$DSM_SHLIB_MINOR" >> $file
-	echo "DSM_STAGE=$DSM_STAGE" >> $file
 	echo "SynoDir=$SynoDir" >> $file
 	echo "SynoIncludeDir=$SynoIncludeDir" >> $file
 	echo "SynoLibDir=$SynoLibDir" >> $file
@@ -294,6 +309,8 @@ WriteEnvToFile() {
 		echo "GrubRANLIB=$GrubRANLIB64" >> $file
 		echo "GrubNM=$GrubNM64" >> $file
 	fi
+
+	echo "GOROOT=/usr/lib/go" >> $file
 
 	return 0
 }
@@ -322,18 +339,9 @@ GenerateEnvMak() # {{{
 SetupCcache() {
 	if [ "${WithCcache}" = "Yes" ]; then
 		CCACHE_BIN="/usr/bin/ccache"
-
-		if [ ! -x ${CCACHE_BIN} ]; then
-			cat << EOF
-
-Binary ${CCACHE_BIN} doesn't exist.
-Use script SynoUpdate --single $SynoBaseProj to check out it, and run SynoBase first.
-EOF
-			exit 2
-		fi
-
 		export CCACHE_DIR="/ccaches/${PLATFORM_ABBR}"
 		export CCACHE_NOCOMPRESS=YES
+		export CCACHE_CPP2=YES
 		export CCACHE_SLOPPINESS=file_macro,include_file_mtime,time_macros
 		mkdir -p ${CCACHE_DIR}
 		chmod 1777 ${CCACHE_DIR}
@@ -346,42 +354,6 @@ EOF
 	fi
 }
 
-AssignMakeFlags() {
-	local proj="$1"
-
-	MAKE_FLAGS=""
-	if [ "Yes" == "$MakeSilent" ]; then
-		MAKE_FLAGS="$MAKE_FLAGS -s -w"
-	fi
-
-	if [ "Yes" == "$MakeJobs" ]; then
-		# Check if we can build this project in parallel
-		MAKE_FLAGS="$MAKE_FLAGS -j $JOBS"
-		# Keep completely quite if (MakeSilent && MakeJons)
-		if [ "Yes" == "$MakeSilent" ]; then
-			MAKE_FLAGS="$MAKE_FLAGS --no-print-directory"
-		fi
-	fi
-}
-
-SetupBuildProjEnv(){
-	local proj=$1
-	export BuildingProj=$proj
-	
-	if Is64BitProject "$proj"; then
-		ApplyBuildEnv "64"
-	else
-		ApplyBuildEnv "32"
-	fi
-
-	AssignMakeFlags $proj
-
-	#clean /deb/build dir
-	rm -rf $DebDevDir/*
-	rm -rf $DebDevBuild/*
-}
-
-
 ReplaceSynoSysRoot() {
 	local configFile=$@
 	for file in $configFile; do
@@ -392,6 +364,48 @@ ReplaceSynoSysRoot() {
 		sed -i "s|@SYNO_SYSROOT@|${ToolChainSysRoot}|g" $file
 	done
 }
+
+AssignMakeFlags() {
+	local proj="$1"
+
+	MAKE_FLAGS=""
+	if [ "Yes" == "$MakeSilent" ]; then
+		MAKE_FLAGS="$MAKE_FLAGS -s -w"
+	fi
+
+	if [ "Yes" == "$MakeJobs" ]; then
+		# Check if we can build this project in parallel
+		if ProjectParallelizable ${proj}; then
+			MAKE_FLAGS="$MAKE_FLAGS -j $JOBS"
+			# Keep completely quite if (MakeSilent && MakeJons)
+			if [ "Yes" == "$MakeSilent" ]; then
+				MAKE_FLAGS="$MAKE_FLAGS --no-print-directory"
+			fi
+		fi
+	fi
+}
+
+SetupBuildProjEnv() {
+	local proj=$1
+	export BuildingProj=$proj
+	DebDevBuild="${DebDir}/build_$proj"
+	DebDevDir="${DebDir}/tmpInstallDir_$proj"
+
+	if Is64BitProject "$proj"; then
+		ApplyBuildEnv "64" "$proj"
+	else
+		ApplyBuildEnv "32" "$proj"
+	fi
+
+	AssignMakeFlags $proj
+
+	for dir in $DebDevDir $DebDevBuild; do
+		rm -rf "$dir"
+		mkdir -p "$dir"
+	done
+
+}
+
 
 
 RunBuildScript() # {{{
@@ -408,7 +422,6 @@ RunBuildScript() # {{{
 
 	if [ ! -d "$proj" ]; then
 		ERROR "Project $proj doesn't exist."
-		INFO "" "Use script SynoUpdate $proj to check out it."
 		return 1
 	fi
 
@@ -424,17 +437,18 @@ RunBuildScript() # {{{
 	fi
 
 	INFO "======= Run build script ======="
-	(. $buildScript)
+	(
+		. $buildScript
+	)
 
 	CheckProjectStatus build $proj > /dev/null
 	return
 } # }}}
 
 
-PackProjectDeb() {
-	#TODO Use SynoDeb to install files instead of copy
+ProjectInstallDev() {
+
 	if [ "$(ls -A "$DebDevDir" 2>/dev/null)" ]; then
-		# remove SysRoot path in pc file
 		for pc in $(find "$DebDevDir" -name "*.pc"); do
 			sed -i "s|${ToolChainSysRoot}||g" "$pc"
 		done
@@ -442,31 +456,30 @@ PackProjectDeb() {
 		find "$DebDevDir" -name '*.la' | xargs rm -rf
 		cp -r "$DebDevDir"/* "$ToolChainSysRoot"
 	fi
-	CheckProjectStatus build $proj > /dev/null
 }
 
-
 BuildProject() {
+	local ret=
 	local proj=$1
-	local installDevScript=
 
-	if ! RunBuildScript "$proj"; then
+	if ! RunBuildScript $proj; then
 		ERROR "Build project fail!"
 		return 1
 	fi
 
-	if ! installDevScript=$(findInstallDevScript "$proj"); then
-		INFO "install-dev scripts not found!"
+	if [ -z "$InstallDevScript" ]; then
+		INFO "No install-dev script."
 		return 0
 	fi
 
 	INFO "======= Run install-dev script ======="
-	INFO "SCRIPT" "install-dev script: ${installDevScript}"
+	INFO "SCRIPT" "install-dev script: ${InstallDevScript}"
 	(
-		. "$installDevScript"
+		. $InstallDevScript
 	)
-	PackProjectDeb "$proj"
-	return $?
+
+	ProjectInstallDev $proj
+	CheckProjectStatus build $proj > /dev/null
 }
 
 fi

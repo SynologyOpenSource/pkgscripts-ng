@@ -1,0 +1,47 @@
+#!/bin/bash
+# Copyright (c) 2000-2020 Synology Inc. All rights reserved.
+
+if [ -z "$__INCLUDE_BUILD_PKG__" ]; then
+__INCLUDE_BUILD_PKG__=defined
+
+BuildExtraArgs=""
+BuildExtraLongArgs="min-sdk:,parallel:"
+Parallel=false
+
+ParseBuildExtraArgs() {
+	while [ -n "$1" ]; do # {{{
+		case "$1" in
+		"--min-sdk")
+			MinSdkVersion="$2"
+			shift
+			;;
+		"--parallel")
+			Parallel=true
+			ProcessCount=$2
+			shift
+			;;
+		*)
+			ERROR "Unknown option: $1"
+			;;
+		esac
+		shift
+	done
+	if [ -z "$BUILD_OPT" ]; then
+		# call again without parameters
+		# to prompt user interactively
+		AskPlatform
+	fi
+}
+
+GetBuildProjList() {
+	local projectList=
+
+	projectList=$(NormalizeBuildProjects $InputProjs)
+	projectList=$(ExcludeList "$projectList" "$(getPlatformExcludeProjs)")
+	projectList=$(ReorderBuildProjects $projectList)
+
+	echo $projectList
+}
+
+fi
+# vim:ft=sh

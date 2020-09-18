@@ -12,7 +12,8 @@ ConfigOpt32="--host=armle-unknown-linux --target=armle-unknown-linux --build=i68
 # For sdk usbcam
 HOST32=armle-unknown-linux
 
-CFLAGS32="-D$PLATFORM_FAMILY -DSYNO_MARVELL_88F6281 -O2"
+PLAT_FLAGS="-DSYNO_MARVELL_88F6281"
+CFLAGS32="-D$PLATFORM_FAMILY -O2 -mcpu=marvell-f"
 LDFLAGS32=""
 CC32=${ToolChainPrefix32}gcc
 CXX32=${ToolChainPrefix32}g++
@@ -27,7 +28,7 @@ StaticDir32="/usr/armle-linux-gnueabi-uclibc"
 StaticPrefix32="/usr/armle-linux-gnueabi-uclibc/bin/arm-uclibc-"
 StaticInclude32="${StaticDir32}/include"
 StaticLib32="${StaticDir32}/lib"
-STATIC_CFLAGS32="-I${StaticInclude32} -D$PLATFORM_FAMILY -DSYNO_MARVELL_88F6281"
+STATIC_CFLAGS32="-I${StaticInclude32} -D$PLATFORM_FAMILY"
 STATIC_LDFLAGS32="-L${StaticLib32}"
 STATIC_CC32=${StaticPrefix32}gcc
 STATIC_LD32=${StaticPrefix32}ld
@@ -40,3 +41,4 @@ KernelToolchain="gcc464_glibc215_88f6281"
 ToolchainTGZList="$KernelToolchain uclibc09332_88f6281"
 SynoKernelConfig="88f6281"
 SynoGNUSources="628x"
+QemuStatic="qemu-arm-static"

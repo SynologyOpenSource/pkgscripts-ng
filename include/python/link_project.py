@@ -1,3 +1,5 @@
+# Copyright (c) 2000-2020 Synology Inc. All rights reserved.
+
 import os
 import subprocess
 import sys
@@ -21,10 +23,7 @@ def link(source, dest, verbase=False):
         raise LinkProjectError("%s not exist." % source)
 
     print("Link %s -> %s" % (source, dest))
-    if os.path.islink(source):
-        subprocess.check_call(['cp', '-aH', source, dest])
-    else:
-        subprocess.check_call(['cp', '-al', source, dest])
+    subprocess.check_call(['cp', '-al', source, dest])
 
 
 def link_scripts(chroot):

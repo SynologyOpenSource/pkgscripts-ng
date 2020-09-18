@@ -1,18 +1,17 @@
 #!/bin/bash
-# Copyright (c) 2000-2016 Synology Inc. All rights reserved.
+# Copyright (c) 2000-2020 Synology Inc. All rights reserved.
 
 if [ -z "$__INCLUDE_PLATFORMS__" ]; then
 __INCLUDE_PLATFORMS__=defined
 
-Source "include/variable"
+. "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"/init
+Source include/variable
+Source include/check
 
-AllPlatformOptionNames="6281 alpine alpine4k apollolake armada370 armada375 armada37xx armada38x armadaxp avoton braswell broadwellnk broadwell bromolow cedarview comcerto2k denverton evansport hi3535 monaco qoriq x64 dockerx64 grantley kvmx64 rtd1296"
+AllPlatformOptionNames="bromolow cedarview armadaxp armada370 armada375 evansport comcerto2k avoton alpine braswell apollolake grantley alpine4k monaco broadwell kvmx64 armada38x denverton rtd1296 broadwellnk armada37xx purley geminilake v1000"
 
 AllPlatforms="	bromolow	BROMOLOW			linux-3.10.x    	Intel Bromolow
-		6281		MARVELL_88F6281			linux-2.6.32    	Marvell 88F6281
-		x64		X64				linux-3.10.x    	X64
 		cedarview	CEDARVIEW			linux-3.10.x    	Intel Cedarview
-		qoriq		PPC_QORIQ			linux-2.6.32		POWER PC QorIQ
 		armadaxp	MARVELL_ARMADAXP		linux-3.x		Marvell armadaxp
 		armada370	MARVELL_ARMADA370		linux-3.x		Marvell armada370
 		armada375	MARVELL_ARMADA375		linux-3.x		Marvell armada375
@@ -22,18 +21,19 @@ AllPlatforms="	bromolow	BROMOLOW			linux-3.10.x    	Intel Bromolow
 		alpine		ALPINE				linux-3.10.x-bsp	AnnapurnaLabs Alpine
 		alpine4k	ALPINE				linux-3.10.x-bsp	AnnapurnaLabs Alpine
 		braswell	BRASWELL			linux-3.10.x		Intel Braswell
-		monaco  	STM_MONACO			linux-3.10.x-bsp	STM Monaco H412
-		armada38x	MARVELL_ARMADA38X		linux-3.10.x-bsp	Marvell armada38x
-		hi3535		HISILICON_HI3535		linux-3.4.x		Hisilicon Hi3535
-		broadwell	BROADWELL			linux-3.10.x		Intel Broadwell
-		dockerx64	DOCKERX64			linux-3.10.x		Synology Docker X64
-		kvmx64		KVMX64				linux-3.10.x		Virtual Machine
+		apollolake  APOLLOLAKE			linux-4.4.x		Intel Apollo Lake
 		grantley	GRANTLEY			linux-3.10.x		Intel Grantley
-		apollolake	APOLLOLAKE			linux-4.4.x		Intel Apollo Lake
+		broadwell	BROADWELL			linux-4.4.x		Intel Broadwell
+		broadwellnk	BROADWELLNK			linux-4.4.x		Intel Broadwell with new kernel
+		monaco  	STM_MONACO			linux-3.10.x-bsp	STM Monaco H412
+		kvmx64		KVMX64				linux-4.4.x		Virtual Machine
+		armada38x	MARVELL_ARMADA38X		linux-3.10.x-bsp	Marvell armada38x
 		rtd1296		REALTEK_RTD1296			linux-4.4.x		Realtek rtd1296
 		denverton	DENVERTON			linux-4.4.x		Intel Denverton
+		purley          PURLEY                          linux-4.4.x             Intel Purley
 		armada37xx	MARVELL_ARMADA37XX		linux-4.4.x		Marvell armada37xx
-		broadwellnk	BROADWELLNK			linux-4.4.x		Intel Broadwell with new kernel
+		geminilake  GEMINILAKE			linux-4.4.x		Intel Gemini Lake
+		v1000           V1000                           linux-4.4.x             AMD Ryzen Embedded V1000
 		"
 
 #
@@ -44,8 +44,7 @@ AllPlatformOptions () {
 }
 
 Is64BitPlatform() {
-	local all64BitPlatforms="X64 BROMOLOW CEDARVIEW AVOTON BRASWELL BROADWELL DOCKERX64 KVMX64 GRANTLEY DENVERTON REALTEK_RTD1296 APOLLOLAKE BROADWELLNK"
-	CheckInList $BUILD_TARGET $all64BitPlatforms && return 0 || return 1
+	[ "$PLATFORM_FAMILY" = "SYNOPLAT_F_X86_64" ] || [ "$PLATFORM_FAMILY" = "SYNOPLAT_F_ARMV8" ]
 }
 
 
@@ -53,7 +52,7 @@ Is64BitPlatform() {
 # PLATFORM_ABBR, BUILD_TARGET, BUILD_OPT
 #
 # Usage
-#	AskPlatfrom $@
+#	AskPlatform $@
 AskPlatform()
 {
 #				PLATFORM_ABBR	BUILD_TARGET			kernel_version		Comment
@@ -81,16 +80,14 @@ AskPlatform()
 			fi
 		done
 	fi
-	if [ -z "${!INDEX}" -a -f /env32.mak ]; then
-		# Auto Detect the platform in env32.mak (genreated by SynoBuild & SynoGPLBuild)
-		declare `grep ^SYNO_PLATFORM= /env32.mak`
-		INDEX=TargetHash_${SYNO_PLATFORM}
+	if [ -z "${!INDEX}" -a -f /root/.bashrc -a -f /root/.chroot ]; then
+		PLATFORM_ABBR=$(grep "CCACHE_DIR=" /root/.bashrc | cut -d'"' -f2 | cut -d'/' -f3)
+		INDEX=AbbrHash_${PLATFORM_ABBR}
 		if [ -n "${!INDEX}" ]; then
-			PLATFORM_ABBR="${AbbrArray[${!INDEX}]}"
-			BUILD_TARGET=$SYNO_PLATFORM
+			BUILD_TARGET=${TargetArray[${!INDEX}]}
 			BUILD_OPT="--${PLATFORM_ABBR}"
 		else
-			echo "Failed to detect platform ($SYNO_PLATFORM) in env32.mak"
+			echo "Failed to detect platform (\$platform) in /root/.bashrc"
 		fi
 		# Since alpine family share the same SYNO_PLATFORM, the above table scanning
 		# falls back to the latest ALPINE entry (alpine4k), we have to use another
@@ -167,27 +164,18 @@ IsPlatformOption ()
 #
 LoadPlatformRelated()
 {
-	[ "$BUILD_TARGET" = "CHROOT" ] && return 0
-
-	SYNO_KERNEL_SOURCE_DIR="`${ScriptsDir}/ProjectDepends.py -dp ${PLATFORM_ABBR}`"
-	if [ -z "${SYNO_KERNEL_SOURCE_DIR}" ]; then
-		echo "Error: Failed to match kernel dir ?!"
-		echo "ScriptsDir=${ScriptsDir}, PLATFORM_ABBR=${PLATFORM_ABBR}"
-		return 1
-	fi
-
 	if ! source ${ScriptsDir}/include/platform.${PLATFORM_ABBR}; then
 		echo "Failed to include ${ScriptsDir}/include/platform.${PLATFORM_ABBR}"
 		return 1
 	fi
-	KernelDir="/source/${SYNO_KERNEL_SOURCE_DIR}"
+
+	export SYNO_PLATFORM="${BUILD_TARGET}"
 
 	return 0
 }
 
-PrepareKernelEnv()
-{
-	cp -vf "$SynobiosDir/include/synobios.h" include/linux/synobios.h
+checkPlatformFunction() {
+	CheckInList "$1" $PLAT_SPEC_VAR
 }
 
 fi

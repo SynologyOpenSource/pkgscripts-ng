@@ -1,0 +1,33 @@
+ToolChainDir32="/usr/local/arm-cortexa9hf-linux-gnueabi"
+ToolChainPrefix32="${ToolChainDir32}/bin/arm-cortexa9hf-linux-gnueabi-"
+ToolChainBin32="${ToolChainDir32}/bin"
+ToolChainInclude32="${ToolChainDir32}/arm-cortexa9hf-linux-gnueabi/sysroot/usr/include"
+ToolChainLib32="${ToolChainDir32}/arm-cortexa9hf-linux-gnueabi/sysroot/lib"
+ToolChainSysRoot32="${ToolChainDir32}/arm-cortexa9hf-linux-gnueabi/sysroot"
+ARCH="arm"
+PLATFORM_FAMILY="SYNOPLAT_F_ARMV7"
+
+ConfigOpt32="--host=armle-unknown-linux --target=armle-unknown-linux --build=i686-pc-linux"
+
+# For sdk usbcam
+HOST32=arm-cortexa9hf-linux-gnueabi
+
+#CFLAGS32="-I${ToolChainInclude32} -mhard-float -mfpu=vfpv3 -DSYNO_BROADCOM_NORTHSTARPLUS -O2"
+CFLAGS32="-DSYNO_BROADCOM_NORTHSTARPLUS -D$PLATFORM_FAMILY -O2 -fno-diagnostics-show-caret -Wno-unused-local-typedefs"
+LDFLAGS32=""
+CC32=${ToolChainPrefix32}gcc
+CXX32=${ToolChainPrefix32}g++
+LD32=${ToolChainPrefix32}ld
+AR32=${ToolChainPrefix32}ar
+STRIP32=${ToolChainPrefix32}strip
+RANLIB32=${ToolChainPrefix32}ranlib
+NM32=${ToolChainPrefix32}nm
+READELF32=${ToolChainPrefix32}readelf
+
+KernelToolchain="gcc483_glibc219_hard"
+ToolchainTGZList="$KernelToolchain"
+UBootToolchain="gcc483_glibc219_hard"
+SynoKernelConfig="northstarplus"
+SynoGNUSources="northstarplus"
+
+BRINGUP_VERSION=5.2

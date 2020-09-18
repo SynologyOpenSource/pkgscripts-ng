@@ -1,10 +1,18 @@
 #!/bin/bash
-# Copyright (c) 2000-2016 Synology Inc. All rights reserved.
-
-. $(dirname `readlink -f "$0"`)/include/init
+# Copyright (c) 2000-2020 Synology Inc. All rights reserved.
 
 LANG=""
 LC_ALL=""
+
+. "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"/include/init
+
+CFLAGS=""
+LDFLAGS=""
+
+Source include/install
+Source include/util
+
+CheckPermission
 
 Usage() {
 	cat << EOF
@@ -20,30 +28,16 @@ Options
 		Specify target platform.
 	-d, --with-debug
 		Install binaries with debug symbols.
+	--parallel N
+		Parallel install projects with N processes
 	-h, --help
 		This help message.
 EOF
 }
 
-Source include/install
-CheckPermission
-
-ARGS=`getopt -u -l $DefaultLongArgs,enable-apt,single $DefaultArgs $@`
-
-if [ $? -ne 0 ]; then
-	echo "You gave me option(s) that I do not know."
-	Usage
-	exit 1
-fi
-set -- $ARGS
-
-
 ParsePkgInstallArgs() {
 while [ -n "$1" ]; do
 	case "$1" in
-	"--enable-apt")
-		ENABLE_APT="yes"
-		;;
 	"--single")
 		# for backward compatibility
 		;;
@@ -57,8 +51,82 @@ while [ -n "$1" ]; do
 done
 }
 
+InstallProj() {
+	local ThisProj=$1
+	local logFile="${LogDir}/${ThisProj}.install"
+	[ -f "$logFile" ] && mv -f "$logFile" "${logFile}.old"
+
+	(
+		INFO "Start to install ${ThisProj}."
+		rm -rf "$TmpInstDir"/*
+		SetupProjInstallEnv $ThisProj
+
+		InstallProject $ThisProj && CreateTarball $ThisProj
+
+		INFO "Install $ThisProj finished!"
+
+	) &> >(tee $logFile)
+}
+
+ParallelInstallProjects() {
+	local projects=$@
+	local pickle="/tmp/$$.pickle"
+	local installProjs doneProjs
+
+	if [ -z "$projects" ]; then
+		echo "No projects input."
+		return 0
+	fi
+
+	echo "${ScriptsDir}/ProjectDepends.py --dump $pickle -p ${PLATFORM_ABBR} $projects"
+	${ScriptsDir}/ProjectDepends.py --dump $pickle -p "${PLATFORM_ABBR}" $projects
+	echo "${ScriptsDir}/ParallelProjects.py --init $pickle -x $projects"
+	${ScriptsDir}/ParallelProjects.py --init $pickle -x $projects
+
+	while true; do
+		installProjs=$(${ScriptsDir}/ParallelProjects.py --next -c "$ProcessCount" $doneProjs)
+		if [ "NULL" = "$installProjs" ]; then
+			echo "Done."
+			break
+		fi
+
+		for ThisProj in $installProjs; do
+			InstallProj $ThisProj >/dev/null &
+			echo "[Installing] $ThisProj"
+		done
+		wait
+
+		doneProjs=
+		for proj in $installProjs; do
+			doneProjs="$doneProjs $proj"
+			if CheckProjectStatus install $proj > /dev/null; then
+				echo "[Success] $proj"
+			else
+				echo "[Failed] $proj"
+			fi
+		done
+	done
+
+	${ScriptsDir}/ParallelProjects.py --purge
+	rm $pickle
+}
+
 main() {
 	local projectList=
+
+	if [ -z "$1" ]; then
+		Usage
+	fi
+
+	ARGS=$(getopt -u -l $DefaultLongArgs,single $DefaultArgs $@)
+
+	if [ $? -ne 0 ]; then
+		echo "You gave me option(s) that I do not know."
+		Usage
+		exit 1
+	fi
+	set -- $ARGS
+
 	local logFile=
 	local installFailed=N
 
@@ -67,23 +135,16 @@ main() {
 
 	SetupInstallEnv "$IsDebugBuild"
 
-	projectList=$(UnifyInstallProjects $InputProjs)
+	projectList=$(NormalizeInstallProjects $InputProjs)
 	INFO "projectList=\"$projectList\""
 
-	for ThisProj in $projectList; do
-		logFile="$LogDir/$ThisProj.install"
-		[ -f "$logFile" ] && mv -f $logFile ${logFile}.old
-
-	(
-		INFO "Start to install ${ThisProj}."
-		SetupProjInstallEnv $ThisProj
-
-		InstallProject $ThisProj && CreateTarball $ThisProj
-
-		INFO "Install $ThisProj finished!"
-
-	) &> >(tee $logFile)
-	done
+	if $Parallel && [ "$(wc -w <<< "$projectList")" -gt 1 ] ; then
+		ParallelInstallProjects $projectList
+	else
+		for ThisProj in $projectList; do
+			InstallProj "$ThisProj"
+		done
+	fi
 
 	if ! CheckErrorLog install $projectList; then
 		return 1;

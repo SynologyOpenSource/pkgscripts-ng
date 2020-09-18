@@ -1,4 +1,7 @@
+# Copyright (c) 2000-2020 Synology Inc. All rights reserved.
+
 import os
+
 
 class Tee:
     def __init__(self, stream, log_file, buffer=1, move=True):
@@ -9,6 +12,7 @@ class Tee:
 
     def write(self, msg):
         self.stream.write(msg)
+        self.stream.flush()
         self.log.write(msg)
 
     def flush(self):

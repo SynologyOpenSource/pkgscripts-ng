@@ -1,0 +1,53 @@
+# Copyright (c) 2000-2020 Synology Inc. All rights reserved.
+
+# Check if a Project is able to be parallelized by
+# make -j
+#
+# Param $1: Prjoect name
+# Return: 0 if ok, 1 if no
+ProjectParallelizable()
+{
+	# virtual project with suffix -virtual-, they will not in the list of SeqProjs
+	# We need to de-virtualize those project to get the real project
+	local Proj=$(GetVirtualProjectName $1)
+	for checkproj in ${SeqProjs}; do
+		if [ "${checkproj}" = "$Proj" ]; then
+			return 1
+		fi
+	done
+	return 0
+}
+
+# Print projects that CANNOT build in parallel
+# $ProjectList: project list to be checked
+PrintSeqProject()
+{
+	for ThisProj in ${ProjectList}; do
+		for checkproj in ${SeqProjs}; do
+			if [ "${checkproj}" = "${ThisProj}" ]; then
+				echo -n "${ThisProj} "
+			fi
+		done
+	done
+	echo
+}
+
+# Print projects that CAN build in parallel
+# $ProjectList: project list to be checked
+PrintParaProject()
+{
+	for ThisProj in ${ProjectList}; do
+		Found="No"
+		for checkproj in ${SeqProjs}; do
+			if [ "${checkproj}" = "${ThisProj}" ]; then
+				Found="Yes"
+				break;
+			fi
+		done
+		if [ ${Found} != "Yes" ]; then
+			echo -n "${ThisProj} "
+		fi
+	done
+	echo
+}
+

@@ -1,38 +1,30 @@
+#!/usr/bin/python3
+# Copyright (c) 2000-2020 Synology Inc. All rights reserved.
+
 import os
+import json
 from collections import defaultdict
 
-from config_parser import ProjectDependsParser, DependsParser
+from config_parser import ProjectDependsParser, DependsParser, KeyValueParser
 import BuildEnv
-
-
-class UpdateFailedError(RuntimeError):
-    pass
+ScriptDir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 class ConflictError(RuntimeError):
     pass
 
 
-class UpdateHook:
-    def __init__(self, *args, **kwargs):
-        pass
-
-    def update_tag(self, projects):
-        pass
-
-    def update_branch(self, projects):
-        pass
-
-
 class ProjectVisitor:
-    def __init__(self, update_hook, dep_level, platforms, depends_cache=None, check_conflict=False):
-        self.dict_projects = None
-        self.update_hook = update_hook
+    def __init__(self, updater, dep_level, platforms=[], depends_cache=None, check_conflict=True, dep_update_projs={}, version=None):
+        self.dict_projects = defaultdict(set)
+        self.updater = updater
         self.dep_level = dep_level
         self.proj_depends = ProjectDependsParser(os.path.join(BuildEnv.ScriptDir, 'include', 'project.depends'))
         self.platforms = platforms
         self.depends_cache = depends_cache
         self.check_conflict = check_conflict
+        self.dep_update_projs = dep_update_projs
+        self.version = version
 
     def devirtual_all(self, projs):
         return set(map(BuildEnv.deVirtual, projs))
@@ -41,30 +33,16 @@ class ProjectVisitor:
         if not isinstance(root_proj, list):
             root_proj = [root_proj]
 
-        self.dict_projects = defaultdict(set)
         self._traverse_projects(root_proj, 1)
         return self.dict_projects
 
-    def checkout_git_refs(self):
-        if self.update_hook:
-            self.update_hook.update_tag(self.dict_projects['refTags'])
-            self.update_hook.update_branch(self.dict_projects['refs'])
-            intersect_projs = self.devirtual_all(self.dict_projects['tags']) & self.devirtual_all(self.dict_projects['branches'])
-            if intersect_projs:
-                self.update_hook.update_branch(intersect_projs)
-
     def show_proj_info(self):
-        print("[INFO] Branch projects: " + " ".join(self.dict_projects['branches']))
-        print("[INFO] Tag projects: " + " ".join(self.dict_projects['tags']))
-        print("[INFO] Reference projects: " + " ".join(self.dict_projects['refs']))
-        print("[INFO] Reference tag projects: " + " ".join(self.dict_projects['refTags']))
+        print("Projects: " + " ".join(self.dict_projects['branches']))
 
     def _traverse_projects(self, projects, level):
         if not projects:
             return
 
-        if self.update_hook:
-            self.update_hook.update_branch(projects)
         self.dict_projects['branches'].update(projects)
 
         self._check_confict()
@@ -86,8 +64,8 @@ class ProjectVisitor:
         if not projects:
             return
 
-        if self.update_hook and not self.depends_cache:
-            self.update_hook.update_tag(projects)
+        if self.updater and not self.depends_cache:
+            self.updater.update_tag(projects)
         self.dict_projects['tags'].update(projects)
 
         self._check_confict()
@@ -142,4 +120,12 @@ class ProjectVisitor:
         return branches, tags, refs, refTags
 
     def _check_confict(self):
-        pass
+        if not self.check_conflict:
+            return
+
+        conflict = self.dict_projects['branches'] & self.dict_projects['tags']
+        if conflict:
+            raise ConflictError(("`%s' both in [BuildDependent] and [BuildDependent-Tag] catagory!" % " ".join(conflict)))
+        conflict = self.dict_projects['branches'] & self.dict_projects['refTags']
+        if conflict:
+            raise ConflictError(("`%s' both in [BuildDependent] and [ReferenceOnly-Tag] catagory!" % " ".join(conflict)))

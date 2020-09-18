@@ -1,0 +1,155 @@
+#!/bin/bash
+# Copyright (c) 2000-2020 Synology Inc. All rights reserved.
+
+if [ -z "$__INCLUDE_VIRTUAL_PROJECT__" ]; then
+__INCLUDE_VIRTUAL_PROJECT__=defined
+
+# Virtual Project = use the same git repo as source folder 
+# but use another build & install script
+#
+# Virtual Install Project = use the same git repo & build script
+# but use another install script
+#
+# priority: virtual proj > virtual inst
+# e.g. allow foo-virtual-junior-abc-virinst-bar1
+#            foo-virtual-junior-abc-virinst-bar2
+VIR_PROJ_SEP="-virtual-"
+VIR_INST_SEP="-virinst-"
+
+HasSubStr() { # {{{
+	if echo $1 | grep -q -- "$2"; then
+		true
+	else
+		false
+	fi
+} # }}}
+
+IsVirInstProject() { # {{{
+	HasSubStr "$1" "$VIR_INST_SEP"
+} # }}}
+
+IsVirtualProject() { # {{{
+	HasSubStr "$1" "$VIR_PROJ_SEP"
+} # }}}
+
+#$1: project name (include VIR_PROJ_SEP or VIR_INST_SEP)
+#return: project name(exclude VIR_PROJ_SEP and VIR_INST_SEP)
+GetBasedProjectName() {
+	if [ -z "$1" ]; then
+		echo "Error: need argument in GetBasedProjectName"
+	fi
+
+	GetVirtualProjectName "$(GetVirInstProjectName "$1")"
+}
+
+#$@: list of project names (include VIR_PROJ_SEP or VIR_INST_SEP)
+#return: list of project names(exclude VIR_PROJ_SEP and VIR_INST_SEP)
+GetBasedProjectNames() {
+	if [ $# -eq 0 ]; then
+		echo "Error: need argument in GetBasedProjectNames"
+	fi
+
+	echo "$@" | sed "s/\([^ ]*\)\(${VIR_PROJ_SEP}\|${VIR_INST_SEP}\)\([^ ]*\)/\1/g"
+}
+
+#$1: project name(include VIR_PROJ_SEP)
+#return: project name(exclude VIR_PROJ_SEP)
+GetVirtualProjectName() { # {{{ Get virutal project "project" part
+	if [ -z "$1" ]; then
+		echo "Error: need argument in GetVirtualProjectName"
+	fi
+
+	local dir=`echo $1 | sed "s/\(.*\)${VIR_PROJ_SEP}\(.*\)/\1/"`
+	echo $dir
+} # }}}
+
+#$1: project name(include VIR_INST_SEP)
+#return: project name(exclude VIR_INST_SEP)
+GetVirInstProjectName() { # {{{ Get virutal project "project" part
+	if [ -z "$1" ]; then
+		echo "Error: need argument in GetVirInstProjectName"
+	fi
+
+	local dir=`echo $1 | sed "s/\(.*\)${VIR_INST_SEP}\(.*\)/\1/"`
+	echo $dir
+} # }}}
+
+#$1: project name(include virtual ext)
+#return: project extension(include seperator)
+GetVirtualProjectExtension() { # {{{ Get virutal project "project" part
+	if [ -z "$1" ]; then
+		echo "Error: need argument in GetVirtualProjectExtension"
+	fi
+
+	local ext=""
+	if IsVirtualProject $1; then
+		ext=`echo $1 | sed "s/\(.*\)${VIR_PROJ_SEP}\(.*\)/${VIR_PROJ_SEP}\2/"`
+	elif IsVirInstProject $1; then
+		ext=`echo $1 | sed "s/\(.*\)${VIR_INST_SEP}\(.*\)/${VIR_INST_SEP}\2/"`
+	fi
+
+	echo $ext
+} # }}}
+
+#$1: project name(include virtual ext or not)
+#$2, $3, ...: all project name
+#return: project in same virtual project family, for example:
+# GetVirtualProjectFamily(busybox, $BuildList, $InstallList) = "busybox busybox-virtual-junior busybox-virtual-junior.wins"
+# GetVirtualProjectFamily(busybox-virtual-junior, $BuildList, $InstallList) = "busybox busybox-virtual-junior busybox-virtual-junior.wins"
+GetVirtualProjectFamily() {
+	if [ -z $1 ]; then
+		echo "Error: need argument in GetVirtualProjectFamily"
+	fi
+
+	local all_project=
+	local return_list=
+	local name="$(GetVirtualProjectName $1)"
+	local p= x= repeat=
+	#local project_list="$(grep '$VIR_PROJ_SEP' include/config
+	shift
+
+	for p in $@; do
+		if echo $p | grep $name > /dev/null 2>&1; then
+			repeat="N"
+			for x in $return_list; do
+				if [ "$x" = "$p" ]; then
+					repeat="Y"
+					break
+				fi
+			done
+			if [ $repeat = "N" ]; then
+				return_list="$return_list $p"
+			fi
+		fi
+	done
+	echo $return_list
+}
+
+#$1: project name(include virtual ext or not)
+#$2, $3, ...: all project name
+#return: project in same virtual project family, for example:
+# InVirtualProjectFamily(busybox, $BuildList, $InstallList) = "Y"
+# InVirtualProjectFamily(busybox-virtual-junior, $BuildList, $InstallList) = "Y"
+# InVirtualProjectFamily(php-5.3.x, $BuildList, $InstallList) = "N"
+InVirtualProejctFamily() {
+	if [ -z $1 ]; then
+		echo "Error: need argument in InVirtualProejctFamily"
+	fi
+	local name=$1
+	local p=$1
+	if echo $name | grep "\\$VIR_PROJ_SEP"; then
+		true
+		return
+	fi
+	shift
+	for p in $@; do
+		if echo $p | grep $name | grep "\\$VIR_PROJ_SEP" > /dev/null 2>&1; then
+			true
+			return
+		fi
+	done
+	false
+}
+
+fi
+# vim:ft=sh

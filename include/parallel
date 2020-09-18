@@ -1,0 +1,107 @@
+#!/bin/bash
+# Copyright (c) 2000-2020 Synology Inc. All rights reserved.
+
+if [ -z "$__INCLUDE_PARALLEL__" ]; then
+__INCLUDE_PARALLEL__=defined
+
+
+ParallelAvailable() {
+	# only check sem existance once.
+	if [ -z "$__PARALLEL_AVAILABLE" ]; then
+		which sem &>/dev/null
+		__PARALLEL_AVAILABLE=$?
+
+		if [ $__PARALLEL_AVAILABLE -eq 0 ]; then
+			SEM_OPTION="--gnu"
+
+			if [ -z "$SEM_VERSION" ]; then
+				SEM_VERSION="$(parallel --version | grep -E "parallel [0-9]+" | awk '{print $NF;}')"
+			fi
+			if [ "$SEM_VERSION" -ge 20131122 ]; then
+				SEM_OPTION="$SEM_OPTION --no-notice"
+			fi
+		fi
+	fi
+
+	return $__PARALLEL_AVAILABLE
+}
+
+ParallelCheckEnvironment() {
+	# User has disabled parallel function.
+	if [ "$__Parallel_enable" == false ]; then
+		return 0
+	fi
+	if ! ParallelAvailable; then
+		echo "******************************************************************" 1>&2
+		echo "Warning: Cannot found sem command in your system." 1>&2
+		echo "Please install parallel package on your build system to enable parallel function." 1>&2
+		echo 1>&2
+		echo "Ubuntu: apt-get install parallel" 1>&2
+		echo "Arch: pacman -S parallel" 1>&2
+		echo "******************************************************************" 1>&2
+
+		return 1
+	fi
+	return 0
+}
+
+ParallelEnable() {
+	if ! ParallelAvailable; then
+		__Parallel_enable=false
+		return 1
+	fi
+
+
+	__Parallel_enable=true
+	return 0
+}
+
+ParallelDisable() {
+	__Parallel_enable=false
+	return 0
+}
+
+__Parallel_id() {
+	echo "$$"
+}
+
+__ParallelRunCond() {
+	ParallelAvailable && ${__Parallel_enable:-true}
+}
+
+ParallelInit() {
+	if __ParallelRunCond; then
+		ParallelCleanSemaphore
+		trap "NoticeGandalf update_abort && ParallelCleanSemaphore" HUP TERM
+		trap "NoticeGandalf update_abort && ParallelCleanSemaphore 130" INT
+		trap "ParallelCleanSemaphore" EXIT
+	fi
+}
+
+ParallelExecute() {
+	if __ParallelRunCond; then
+		sem $SEM_OPTION --id "$(__Parallel_id)" -j "${PARALLEL_JOBS:-+0}" "$@"
+	else
+		"$@"
+	fi
+}
+
+ParallelWait() {
+	if __ParallelRunCond; then
+		sem $SEM_OPTION --wait --id "$(__Parallel_id)"
+	fi
+}
+
+ParallelCleanSemaphore() {
+	local return_value="$1"
+
+	if __ParallelRunCond; then
+		rm -rf ~/.parallel/semaphores/id-$(__Parallel_id)
+	fi
+
+	if [ -n "$return_value" ]; then
+		exit "$return_value"
+	fi
+}
+
+fi

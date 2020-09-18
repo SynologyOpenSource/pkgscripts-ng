@@ -1,0 +1,41 @@
+ToolChainDir32="/usr/local/powerpc-none-linux-gnuspe"
+ToolChainPrefix32="/usr/local/powerpc-none-linux-gnuspe/bin/powerpc-none-linux-gnuspe-"
+ToolChainSysRoot32="${ToolChainDir32}/powerpc-none-linux-gnuspe/libc"
+ToolChainBin32="${ToolChainSysRoot32}/usr/bin"
+ToolChainInclude32="${ToolChainSysRoot32}/usr/include"
+ToolChainLib32="${ToolChainSysRoot32}/lib"
+ARCH="powerpc"
+PLATFORM_FAMILY="SYNOPLAT_F_PPC"
+
+ConfigOpt32="--host=powerpc-unknown-linux --target=powerpc-unknown-linux --build=i686-pc-linux"
+# For sdk usbcam
+HOST32=powerpc-unknown-linux
+
+CFLAGS32="-mcpu=8548 -mhard-float -mfloat-gprs=double -D$PLATFORM_FAMILY -DSYNO_PPC_853X -O2"
+LDFLAGS32=""
+CC32=${ToolChainPrefix32}gcc
+CXX32=${ToolChainPrefix32}g++
+LD32=${ToolChainPrefix32}ld
+AR32=${ToolChainPrefix32}ar
+STRIP32=${ToolChainPrefix32}strip
+RANLIB32=${ToolChainPrefix32}ranlib
+NM32=${ToolChainPrefix32}nm
+READELF32=${ToolChainPrefix32}readelf
+
+StaticDir32="/usr/ppc10xx-linux-uclibc"
+StaticPrefix32="/usr/ppc10xx-linux-uclibc/bin/powerpc-uclibc-"
+StaticInclude32="/usr/ppc10xx-linux-uclibc/include"
+StaticLib32="/usr/ppc10xx-linux-uclibc/lib"
+STATIC_CFLAGS32="-I${StaticInclude32} -D$PLATFORM_FAMILY -DSYNO_PPC_853X"
+STATIC_LDFLAGS32="-L/usr/ppc10xx-linux-uclibc/lib"
+STATIC_CC32=${StaticPrefix32}gcc
+STATIC_LD32=${StaticPrefix32}ld
+STATIC_AR32=${StaticPrefix32}ar
+STATIC_STRIP32=${StaticPrefix32}strip
+STATIC_RANLIB32=${StaticPrefix32}ranlib
+STATIC_NM32=${StaticPrefix32}nm
+
+KernelToolchain="gcc4374_eglibc2874_qoriq"
+ToolchainTGZList="$KernelToolchain uclibc0929_qoriq freescale-2010.09 uclibc09321_qoriq gcc452_glibc213_qoriq"
+SynoKernelConfig="ppc8533"
+SynoGNUSources="85xx"
