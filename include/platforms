@@ -6,7 +6,7 @@ __INCLUDE_PLATFORMS__=defined
 
 Source "include/variable"
 
-AllPlatformOptionNames="6281 alpine alpine4k apollolake armada370 armada375 armada37xx armada38x armadaxp avoton braswell broadwellnk broadwell bromolow cedarview comcerto2k denverton evansport hi3535 monaco qoriq x64 dockerx64 grantley kvmx64 rtd1296"
+AllPlatformOptionNames="6281 alpine alpine4k apollolake armada370 armada375 armada37xx armada38x armadaxp avoton braswell broadwellnk broadwell bromolow cedarview comcerto2k denverton evansport hi3535 monaco qoriq x64 dockerx64 grantley kvmx64 rtd1296 purley v1000 geminilake"
 
 AllPlatforms="	bromolow	BROMOLOW			linux-3.10.x    	Intel Bromolow
 		6281		MARVELL_88F6281			linux-2.6.32    	Marvell 88F6281
@@ -34,6 +34,9 @@ AllPlatforms="	bromolow	BROMOLOW			linux-3.10.x    	Intel Bromolow
 		denverton	DENVERTON			linux-4.4.x		Intel Denverton
 		armada37xx	MARVELL_ARMADA37XX		linux-4.4.x		Marvell armada37xx
 		broadwellnk	BROADWELLNK			linux-4.4.x		Intel Broadwell with new kernel
+		purley		PURLEY				linux-4.4.x		Intel Purley
+		v1000		V1000				linux-4.4.x		Intel V1000
+		geminilake	GEMINILAKE			linux-4.4.x		Intel Geminilake
 		"
 
 #
