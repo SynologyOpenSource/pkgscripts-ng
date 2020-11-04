@@ -52,12 +52,13 @@ class DownloadToolkitError(EnvDeployError):
 
 
 class ToolkitDownloader:
-    def __init__(self, version, platforms, tarball_manager, quiet):
+    def __init__(self, version, platforms, tarball_manager, quiet, proxy):
         self._download_list = []
         self.version, self.build_num = split_version(version)
         self.platforms = platforms
         self.tarball_manager = tarball_manager
         self.quiet = quiet
+        self.proxy = proxy
 
         self.append_base_tarball()
         self.append_env_tarball()
@@ -83,6 +84,11 @@ class ToolkitDownloader:
 
         try:
             dest = os.path.join(DownloadDir, url.split("/")[-1])
+            if self.proxy != '':
+                print("Using proxy: " + self.proxy)
+                proxy_handler = urllib.request.ProxyHandler({'http':self.proxy,'https':self.proxy})
+                opener = urllib.request.build_opener(proxy_handler)
+                urllib.request.install_opener(opener)
             urllib.request.urlretrieve(url, dest, reporthook=reporthook)
             print("Download destination: " + dest)
         except urllib.error.HTTPError:
@@ -297,6 +303,7 @@ def parse_args(argv):
     argparser.add_argument('-q', '--quiet', action='store_true', help="Don't display download status bar")
     argparser.add_argument('-l', '--list', action="store_true", default=False, help='List available platforms')
     argparser.add_argument('-p', dest='platforms', default="", help='Deploy platforms')
+    argparser.add_argument('-x', '--proxy', dest='proxy', default="", help='HTTP/HTTPS proxy (e.g. \'192.168.1.1:8080\')')
 
     args = argparser.parse_args(argv)
     args.platforms = args.platforms.split()
@@ -323,7 +330,7 @@ def main(argv):
     tarball_manager = TarballManager(dsm_ver, tarball_root)
 
     if not args.local_tarball:
-        ToolkitDownloader(args.version, platforms, tarball_manager, args.quiet).download_toolkit()
+        ToolkitDownloader(args.version, platforms, tarball_manager, args.quiet, args.proxy).download_toolkit()
 
     check_tarball_exists(build_num, platforms, tarball_manager)
     ToolkitDeployer(args, platforms, tarball_manager).deploy()
