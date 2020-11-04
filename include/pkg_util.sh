@@ -15,8 +15,8 @@ pkg_log() {
 
 pkg_get_platform() {
 	local arch=
-	declare -f AskPlatform &>/dev/null || . /pkgscripts/include/platforms
-	declare -f AskPlatform &>/dev/null || . /pkgscripts/include/check
+	declare -f AskPlatform &>/dev/null || . /pkgscripts-ng/include/platforms
+	declare -f AskPlatform &>/dev/null || . /pkgscripts-ng/include/check
 	declare -f AskPlatform &>/dev/null || return 1
 
 	local abbr=$(AskPlatform && echo $PLATFORM_ABBR)
@@ -79,7 +79,7 @@ plat_to_family() {
 			;;
 		*)
 			echo "Failed to get platform family for $family" 1>&2
-			echo "Please add the mapping information into pkgscripts/pkg_util.sh:pkg_get_platform_family" 1>&2
+			echo "Please add the mapping information into pkgscripts-ng/include/pkg_util.sh:pkg_get_platform_family" 1>&2
 			return 1
 	esac
 	echo "$family"
@@ -170,18 +170,30 @@ check_necessary_field() {
 }
 
 pkg_dump_info() {
+	local langs="enu cht chs krn ger fre ita spn jpn dan nor sve nld rus plk ptb ptg hun trk csy"
 	local fields="package version maintainer maintainer_url distributor distributor_url arch exclude_arch model exclude_model
 		adminprotocol adminurl adminport firmware dsmuidir dsmappname dsmapppage dsmapplaunchname checkport allow_altport
 		startable helpurl report_url support_center install_reboot install_dep_packages install_conflict_packages install_dep_services
 		instuninst_restart_services startstop_restart_services start_dep_services silent_install silent_upgrade silent_uninstall install_type
 		checksum package_icon package_icon_120 package_icon_128 package_icon_144 package_icon_256 thirdparty support_conf_folder
 		auto_upgrade_from offline_install precheckstartstop os_min_ver os_max_ver beta ctl_stop ctl_install ctl_uninstall
-		install_break_packages install_replace_packages use_deprecated_replace_mechanism"
+		install_break_packages install_replace_packages use_deprecated_replace_mechanism description displayname"
 	local f=
 
 	for f in $fields; do
 		if [ -n "${!f}" ]; then
 			echo $f=\"${!f}\"
+		fi
+	done
+
+	for lang in $langs; do
+		description="description_${lang}"
+		if [ -n "${!description}" ]; then
+			echo "${description}=\"${!description}\""
+		fi
+		displayname="displayname_${lang}"
+		if [ -n "${!displayname}" ]; then
+			echo "${displayname}=\"${!displayname}\""
 		fi
 	done
 }

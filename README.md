@@ -10,7 +10,7 @@ You can download and set up pre-built environments by using **EnvDeploy** as fol
 If -p is not given, all available platforms for given version will be set up.
 
 ```
-cd /toolkit/pkgscripts
+cd /toolkit/pkgscripts-ng
 ./EnvDeploy -v 7.0 -p avoton # for example
 ```
 
@@ -19,7 +19,7 @@ and **ds.avoton-7.0** is the chroot environment to build your own projects.
 
 ```
 toolkit/
-├── pkgscripts/
+├── pkgscripts-ng/
 └── build_env/
     ├── ...
     └── ds.avoton-7.0/
