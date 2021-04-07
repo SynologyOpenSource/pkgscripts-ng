@@ -23,7 +23,8 @@ sys.stderr = Tee(sys.stderr, log_file, move=False)
 
 VersionMap = 'version_map'
 DownloadDir = os.path.join(BuildEnv.SynoBase, 'toolkit_tarballs')
-ToolkitServer = 'https://sourceforge.net/projects/dsgpl/files/toolkit'
+ToolkitServerDefault = 'https://sourceforge.net/projects/dsgpl/files/toolkit'
+ToolkitServer = ToolkitServerDefault
 Product = "DSM"
 
 
@@ -297,6 +298,7 @@ def parse_args(argv):
     argparser.add_argument('-q', '--quiet', action='store_true', help="Don't display download status bar")
     argparser.add_argument('-l', '--list', action="store_true", default=False, help='List available platforms')
     argparser.add_argument('-p', dest='platforms', default="", help='Deploy platforms')
+    argparser.add_argument('-T', '--toolkitserver', dest='tkserver', default=ToolkitServerDefault, help='Toolkit server, defaults to SourceForge')
 
     args = argparser.parse_args(argv)
     args.platforms = args.platforms.split()
@@ -308,10 +310,12 @@ def parse_args(argv):
 
 
 def main(argv):
+    global ToolkitServer
     args = parse_args(argv)
     dsm_ver, build_num = split_version(args.version)
     platforms = get_platforms(dsm_ver, build_num, args.platforms)
     tarball_root = DownloadDir
+    ToolkitServer = args.tkserver
 
     if args.list:
         print("Available platforms: " + " ".join(platforms))
