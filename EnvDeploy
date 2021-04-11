@@ -8,6 +8,10 @@ import os
 import subprocess
 import glob
 import shutil
+import hashlib
+import json
+import re
+from functools import partial
 
 sys.path.append(os.path.realpath(os.path.dirname(__file__)) + "/include/python")
 import BuildEnv
@@ -58,6 +62,7 @@ class ToolkitDownloader:
         self.platforms = platforms
         self.tarball_manager = tarball_manager
         self.quiet = quiet
+        self.md5sums = {}
 
         self.append_base_tarball()
         self.append_env_tarball()
@@ -65,6 +70,34 @@ class ToolkitDownloader:
 
         if not os.path.isdir(DownloadDir):
             os.makedirs(DownloadDir)
+
+    def _fetch_md5sums(self):
+        try:
+            indexurl = ToolkitServer + "/" + Product + self.version
+            with urllib.request.urlopen(indexurl) as response:
+                html = response.read().decode("utf-8")
+                m = re.search(r'^\s*net\.sf\.files\s+=\s+(.*\}\});\s*$', html, re.MULTILINE)
+                sfmeta = json.loads(m.group(1))
+                for meta in sfmeta:
+                    if sfmeta[meta]["type"] == "f" and sfmeta[meta]["md5"] != "":
+                        self.md5sums[meta] = sfmeta[meta]["md5"]
+        except (IndexError, json.JSONDecodeError, urllib.error.HTTPError):
+            self.md5sums = {}
+            raise DownloadToolkitError("Failed to fetch md5sums at " + indexurl)
+
+    def _check_md5(self, url):
+        filename = os.path.join(DownloadDir, url.split("/")[-1])
+        try:
+            key = os.path.basename(filename)
+            if key in self.md5sums:
+                with open(filename, mode='rb') as f:
+                    d = hashlib.md5()
+                    for buf in iter(partial(f.read, 128), b''):
+                        d.update(buf)
+                return self.md5sums[key] == d.hexdigest()
+        except IOError:
+            pass
+        return False
 
     def _join_download_url(self, *patterns):
         url = ToolkitServer
@@ -114,11 +147,17 @@ class ToolkitDownloader:
             self._download_list.append(self._join_download_url(Product + self.version, get_tarball_name(platform)))
 
     def download_toolkit(self):
+        self._fetch_md5sums();
         for url in self._download_list:
-            if self._test_url_available(url):
-                self._download(url)
+            if self._check_md5(url):
+                print("Already downloaded " + url)
             else:
-                raise DownloadToolkitError("URL {} does not exist. Please ask synology support for assistance.".format(url))
+                if self._test_url_available(url):
+                    self._download(url)
+                    if not self._check_md5(url):
+                        raise DownloadToolkitError("Checksum validation of {} failed.".format(url))
+                else:
+                    raise DownloadToolkitError("URL {} does not exist. Please ask synology support for assistance.".format(url))
 
 
 class ToolkitDeployer:
