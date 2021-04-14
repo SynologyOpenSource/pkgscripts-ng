@@ -26,6 +26,7 @@ DebDevDir="${DebDir}/tmpInstallDir"
 DebPkgDir="${DebDir}/result"
 
 DEFAULT_CCACHE_SIZE="8G"
+PRODUCT="DSM"
 
 fi # header guard
 # vim:ft=sh
