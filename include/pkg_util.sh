@@ -60,6 +60,7 @@ pkg_get_platform() { # [path of env.mak (default: /env.mak)]
 			X64)			arch="x86" ;;
 			BROMOLOW)		arch="bromolow" ;;
 			BROADWELLNK)		arch="broadwellnk" ;;
+			GEMINILAKE)		arch="geminilake" ;;
 			DENVERTON)		arch="denverton" ;;
 			REALTEK_RTD1296)        arch="rtd1296" ;;
 			APOLLOLAKE)		arch="apollolake" ;;
@@ -92,8 +93,8 @@ plat_to_unified_plat() {
 	local unified_plat=
 
 	case "$plat" in
-		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley | denverton | apollolake | broadwellnk)
-			unified_plat="x86 bromolow cedarview avoton braswell broadwell dockerx64 kvmx64 grantley denverton apollolake broadwellnk"
+		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley | denverton | apollolake | broadwellnk | geminilake)
+			unified_plat="x86 bromolow cedarview avoton braswell broadwell dockerx64 kvmx64 grantley denverton apollolake broadwellnk geminilake"
 			;;
 		# alpine and alpine4k use same define.
 		alpine | alpine4k )
@@ -111,7 +112,7 @@ plat_to_family() {
 	local family=
 
 	case "$plat" in
-		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley | denverton | apollolake | broadwellnk)
+		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley | denverton | apollolake | broadwellnk | geminilake)
 			family="x86_64"
 			;;
 		evansport )
@@ -216,7 +217,7 @@ pkg_get_spk_unified_platform() { # [path of env.mak (default: /env.mak)]
 		88f6281)
 			spk_unified_platform="88f628x"
 			;;
-		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley | denverton | apollolake | broadwellnk)
+		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley | denverton | apollolake | broadwellnk | geminilake)
 			spk_unified_platform="x64"
 			;;
 		alpine | alpine4k )
