@@ -19,7 +19,7 @@ from utils import move_old
 from version_file import VersionFile
 VersionMap = 'version_map'
 DownloadDir = os.path.join(BuildEnv.SynoBase, 'toolkit_tarballs')
-ToolkitServer = 'https://sourceforge.net/projects/dsgpl/files/toolkit'
+ToolkitServer = 'https://dataupdate7.synology.com/toolchain/v1/get_download_list?identify=toolkit'
 
 
 class EnvDeployError(RuntimeError):
@@ -86,36 +86,31 @@ class ToolkitDownloader:
 
     def download_base_tarball(self, quiet):
         self._download(
-            self._join_download_url(self.tarball_manager.base_tarball_name),
+            self._join_download_url('base'),
             quiet
         )
 
     def download_platform_tarball(self, platform, quiet):
-        self._download(self._join_download_url(
-            self.tarball_manager.get_env_tarball_name(platform)), quiet)
-        self._download(self._join_download_url(
-            self.tarball_manager.get_dev_tarball_name(platform)), quiet)
+        self._download(self._join_download_url(platform), quiet)
 
-    def _join_download_url(self, *patterns):
-        url = ToolkitServer
-        for pattern in ['DSM' + self.dsm_ver, self.build_num] + list(patterns):
-            if not pattern:
-                continue
-            url += '/%s' % pattern
-        return url
+    def _join_download_url(self, platform):
+        return '%s&version=%s&platform=%s' % (ToolkitServer, self.dsm_ver, platform)
 
     def _download(self, url, quiet):
-        logging.info("Download... " + url)
+        logging.info("Download... %s" % (url))
         if quiet or not sys.stdout.isatty():
             reporthook = None
         else:
             reporthook = self.dl_progress
 
-        try:
-            urllib.request.urlretrieve(url, os.path.join(
-                DownloadDir, url.split("/")[-1]), reporthook=reporthook)
-        except urllib.error.HTTPError as e:
-            raise DownloadToolkitError("Failed to download toolkit: " + url + ", reason: " + str(e))
+        with urllib.request.urlopen(url) as response:
+            data = json.loads(response.read())
+            for link in data["fileList"]:
+                try:
+                    urllib.request.urlretrieve(link, os.path.join(
+                        DownloadDir, link.split("/")[-1]), reporthook=reporthook)
+                except urllib.error.HTTPError as e:
+                    raise DownloadToolkitError("Failed to download toolkit: %s , reason: %s" % (link, str(e)))
 
     def dl_progress(self, count, dl_size, total_size):
         percent = int(count * dl_size * 50 / total_size)
@@ -223,7 +218,7 @@ class ChrootToolkit(ToolkitEnv):
 
         for f in files:
             if not os.path.isfile(f):
-                raise TarballNotFoundError("Needed file not found! " + f)
+                raise TarballNotFoundError("Needed file not found! %s" % (f))
 
     @property
     def has_pixz(self):
