@@ -292,6 +292,7 @@ def parse_args(argv):
                            help='Deploy toolkit version (6.0 or 6.0-9527), default is latest version')
     argparser.add_argument('-c', '--clear', action='store_true', default=False,
                            help='Clear chroot before deploy')
+    argparser.add_argument('-d', '--download-only', dest='download_only', action='store_true', default=False, help='Only download tarballs')
     argparser.add_argument('-t', '--tarball', dest='local_tarball', default=None, help='Use local tarball dir')
     argparser.add_argument('-s', '--suffix', help='Assign build_env suffix, ex build_env-demo')
     argparser.add_argument('-q', '--quiet', action='store_true', help="Don't display download status bar")
@@ -303,6 +304,9 @@ def parse_args(argv):
 
     if not args.version:
         args.version = BuildEnv.getIncludeVariable('toolkit.config', 'LatestVersion')
+
+    if args.local_tarball and args.download_only:
+        raise RuntimeError("Cannot specify -t|--tarball and -d|--download-only at the same time")
 
     return args
 
@@ -324,6 +328,8 @@ def main(argv):
 
     if not args.local_tarball:
         ToolkitDownloader(args.version, platforms, tarball_manager, args.quiet).download_toolkit()
+        if args.download_only:
+            return
 
     check_tarball_exists(build_num, platforms, tarball_manager)
     ToolkitDeployer(args, platforms, tarball_manager).deploy()
