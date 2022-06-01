@@ -1,9 +1,9 @@
 ToolChainDir32="/usr/local/i686-pc-linux-gnu"
 ToolChainPrefix32="/usr/local/i686-pc-linux-gnu/bin/i686-pc-linux-gnu-"
 ToolChainBin32="${ToolChainDir32}/bin"
-ToolChainInclude32="${ToolChainDir32}/i686-pc-linux-gnu/sys-root/usr/include"
-ToolChainLib32="${ToolChainDir32}/i686-pc-linux-gnu/sys-root/lib"
 ToolChainSysRoot32="${ToolChainDir32}/i686-pc-linux-gnu/sys-root"
+ToolChainInclude32="${ToolChainSysRoot32}/usr/include"
+ToolChainLib32="${ToolChainSysRoot32}/lib"
 ARCH="x86_64"
 PLATFORM_FAMILY="SYNOPLAT_F_X86_64"
 
@@ -12,7 +12,7 @@ ConfigOpt32="--host=i686-pc-linux-gnu --target=i686-pc-linux-gnu --build=i686-pc
 # For sdk usbcam
 HOST32=i686-pc-linux-gnu
 
-PLAT_FLAGS="-DSYNO_NEXTKVMX64"
+PLAT_FLAGS="-DSYNO_R1000"
 CFLAGS32="-D$PLATFORM_FAMILY -O2"
 LDFLAGS32=""
 CC32=${ToolChainPrefix32}gcc
@@ -27,9 +27,10 @@ READELF32=${ToolChainPrefix32}readelf
 ToolChainDir64="/usr/local/x86_64-pc-linux-gnu"
 ToolChainPrefix64="/usr/local/x86_64-pc-linux-gnu/bin/x86_64-pc-linux-gnu-"
 ToolChainBin64="${ToolChainDir64}/bin"
-ToolChainInclude64="${ToolChainDir64}/x86_64-pc-linux-gnu/sys-root/usr/include/"
-ToolChainLib64="${ToolChainDir64}/x86_64-pc-linux-gnu/sys-root/lib"
 ToolChainSysRoot64="${ToolChainDir64}/x86_64-pc-linux-gnu/sys-root"
+ToolChainInclude64="${ToolChainSysRoot64}/usr/include"
+ToolChainLib64="${ToolChainSysRoot64}/lib"
+ToolChainSysInclude64=""
 
 ConfigOpt64="--host=x86_64-pc-linux-gnu --target=x86_64-pc-linux-gnu --build=i686-pc-linux-gnu"
 
@@ -71,5 +72,5 @@ GrubNM64=${GrubToolChainPrefix64}nm
 
 KernelToolchain="gcc850_glibc226_x86_64"
 ToolchainTGZList="$KernelToolchain gcc850_glibc226_i686"
-SynoKernelConfig="nextkvmx64"
+SynoKernelConfig="r1000"
 SynoGNUSources="x86 x64"

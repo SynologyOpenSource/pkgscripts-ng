@@ -14,7 +14,7 @@ ConfigOpt32="--host=armle-unknown-linux --target=armle-unknown-linux --build=i68
 HOST32=arm-unknown-linux-gnueabi
 
 PLAT_FLAGS="-DSYNO_MARVELL_ARMADA375"
-CFLAGS32="-mhard-float -mfpu=vfpv3 -march=armv7-a -mcpu=cortex-a9 -mtune=cortex-a9 -D$PLATFORM_FAMILY -O2 -fno-diagnostics-show-caret -Wno-unused-local-typedefs"
+CFLAGS32="-mfloat-abi=hard -march=armv7-a+mp+sec -mtune=cortex-a9 -mcpu=cortex-a9 -mfpu=vfpv3 -D$PLATFORM_FAMILY -O2 -fno-diagnostics-show-caret -Wno-unused-local-typedefs"
 LDFLAGS32=""
 CC32=${ToolChainPrefix32}gcc
 CXX32=${ToolChainPrefix32}g++
@@ -25,7 +25,7 @@ RANLIB32=${ToolChainPrefix32}ranlib
 NM32=${ToolChainPrefix32}nm
 READELF32=${ToolChainPrefix32}readelf
 
-KernelToolchain="gcc730_glibc226_hard"
+KernelToolchain="gcc850_glibc226_hard"
 ToolchainTGZList="$KernelToolchain gcc464_glibc215_softfp_armada375"
 UBootToolchain="gcc464_glibc215_softfp_armada375"
 SynoKernelConfig="armada375"

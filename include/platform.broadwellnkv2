@@ -12,8 +12,8 @@ ConfigOpt32="--host=i686-pc-linux-gnu --target=i686-pc-linux-gnu --build=i686-pc
 # For sdk usbcam
 HOST32=i686-pc-linux-gnu
 
-PLAT_FLAGS="-DSYNO_NEXTKVMX64"
-CFLAGS32="-D$PLATFORM_FAMILY -O2"
+PLAT_FLAGS="-DSYNO_BROADWELLNKV2"
+CFLAGS32="-D$PLATFORM_FAMILY -DSYNO_SAS -O2"
 LDFLAGS32=""
 CC32=${ToolChainPrefix32}gcc
 CXX32=${ToolChainPrefix32}g++
@@ -28,6 +28,7 @@ ToolChainDir64="/usr/local/x86_64-pc-linux-gnu"
 ToolChainPrefix64="/usr/local/x86_64-pc-linux-gnu/bin/x86_64-pc-linux-gnu-"
 ToolChainBin64="${ToolChainDir64}/bin"
 ToolChainInclude64="${ToolChainDir64}/x86_64-pc-linux-gnu/sys-root/usr/include/"
+ToolChainSysInclude64=""
 ToolChainLib64="${ToolChainDir64}/x86_64-pc-linux-gnu/sys-root/lib"
 ToolChainSysRoot64="${ToolChainDir64}/x86_64-pc-linux-gnu/sys-root"
 
@@ -36,7 +37,7 @@ ConfigOpt64="--host=x86_64-pc-linux-gnu --target=x86_64-pc-linux-gnu --build=i68
 # For sdk usbcam
 HOST64=x86_64-pc-linux-gnu
 
-CFLAGS64="-D$PLATFORM_FAMILY -O2"
+CFLAGS64="-D$PLATFORM_FAMILY -DSYNO_SAS -O2"
 LDFLAGS64=""
 CC64=${ToolChainPrefix64}gcc
 CXX64=${ToolChainPrefix64}g++
@@ -71,5 +72,5 @@ GrubNM64=${GrubToolChainPrefix64}nm
 
 KernelToolchain="gcc850_glibc226_x86_64"
 ToolchainTGZList="$KernelToolchain gcc850_glibc226_i686"
-SynoKernelConfig="nextkvmx64"
+SynoKernelConfig="broadwellnkv2"
 SynoGNUSources="x86 x64"

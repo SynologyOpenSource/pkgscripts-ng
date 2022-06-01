@@ -13,7 +13,7 @@ ConfigOpt32="--host=arm-unknown-linux-gnueabi --target=arm-unknown-linux-gnueabi
 HOST32=armle-unknown-linux
 
 PLAT_FLAGS="-DSYNO_ANNAPURNA_ALPINE -DSYNO_ANNAPURNA_ALPINE4K"
-CFLAGS32="-D$PLATFORM_FAMILY -O2 -mfloat-abi=hard -march=armv7ve -mcpu=cortex-a15 -mtune=cortex-a15 -mfpu=neon-vfpv4 -mthumb -fno-diagnostics-show-caret -Wno-unused-local-typedefs"
+CFLAGS32="-mfloat-abi=hard -march=armv7ve -mtune=cortex-a15 -mcpu=cortex-a15 -mfpu=neon-vfpv4 -mthumb -D$PLATFORM_FAMILY -O2 -fno-diagnostics-show-caret -Wno-unused-local-typedefs"
 LDFLAGS32=""
 CC32=${ToolChainPrefix32}gcc
 CXX32=${ToolChainPrefix32}g++
@@ -24,7 +24,7 @@ RANLIB32=${ToolChainPrefix32}ranlib
 NM32=${ToolChainPrefix32}nm
 READELF32=${ToolChainPrefix32}readelf
 
-KernelToolchain="gcc730_glibc226_hard"
+KernelToolchain="gcc850_glibc226_hard"
 ToolchainTGZList="$KernelToolchain gcc472_glibc215_alpine"
 UBootToolchain="gcc472_glibc215_alpine"
 SynoKernelConfig="alpine4k"

@@ -70,7 +70,7 @@ GrubSTRIP64=${GrubToolChainPrefix64}strip
 GrubRANLIB64=${GrubToolChainPrefix64}ranlib
 GrubNM64=${GrubToolChainPrefix64}nm
 
-KernelToolchain="gcc730_glibc226_x86_64"
-ToolchainTGZList="$KernelToolchain gcc730_glibc226_i686on64"
+KernelToolchain="gcc850_glibc226_x86_64"
+ToolchainTGZList="$KernelToolchain gcc850_glibc226_i686"
 SynoKernelConfig="apollolake"
 SynoGNUSources="x86 x64"

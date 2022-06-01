@@ -48,7 +48,7 @@ RANLIB64=${ToolChainPrefix64}ranlib
 NM64=${ToolChainPrefix64}nm
 READELF64=${ToolChainPrefix64}readelf
 
-KernelToolchain="gcc730_glibc226_x86_64"
-ToolchainTGZList="$KernelToolchain gcc730_glibc226_i686on64"
+KernelToolchain="gcc850_glibc226_x86_64"
+ToolchainTGZList="$KernelToolchain gcc850_glibc226_i686"
 SynoKernelConfig="x86_64"
 SynoGNUSources="x86 x64"

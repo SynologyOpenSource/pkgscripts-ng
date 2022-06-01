@@ -8,7 +8,7 @@ __INCLUDE_PLATFORMS__=defined
 Source include/variable
 Source include/check
 
-AllPlatformOptionNames="bromolow cedarview armadaxp armada370 armada375 evansport comcerto2k avoton alpine braswell apollolake grantley alpine4k monaco broadwell kvmx64 armada38x denverton rtd1296 broadwellnk armada37xx purley geminilake v1000"
+AllPlatformOptionNames="bromolow cedarview armadaxp armada370 armada375 evansport comcerto2k avoton alpine braswell apollolake grantley alpine4k monaco broadwell kvmx64 armada38x denverton rtd1296 broadwellnk armada37xx purley geminilake v1000 epyc7002 r1000 broadwellnkv2 rtd1619b"
 
 AllPlatforms="	bromolow	BROMOLOW			linux-3.10.x    	Intel Bromolow
 		cedarview	CEDARVIEW			linux-3.10.x    	Intel Cedarview
@@ -34,6 +34,10 @@ AllPlatforms="	bromolow	BROMOLOW			linux-3.10.x    	Intel Bromolow
 		armada37xx	MARVELL_ARMADA37XX		linux-4.4.x		Marvell armada37xx
 		geminilake  GEMINILAKE			linux-4.4.x		Intel Gemini Lake
 		v1000           V1000                           linux-4.4.x             AMD Ryzen Embedded V1000
+		epyc7002	EPYC7002			linux-5.10.x		AMD x86 Linux Linux 5.10.55 (epyc7002)
+		r1000		R1000				linux-4.4.x		AMD x86 Linux 4.4.180 (r1000)
+		broadwellnkv2	BROADWELLNKV2			linux-4.4.x		Intel x86 Linux 4.4.180 (Broadwellnkv2)
+		rtd1619b	REALTEK_RTD1619B		linux-5.10.x		Realtek RTD16xxb Linux 5.10.55
 		"
 
 #

@@ -13,8 +13,8 @@ ConfigOpt32="--host=aarch64-unknown-linux-gnu --target=aarch64-unknown-linux-gnu
 # For sdk usbcam
 HOST32=aarch64-unknown-linux-gnu/
 
-PLAT_FLAGS="-DSYNO_MARVELL_ARMADA37XX"
-CFLAGS32="-I${ToolChainInclude32} -D$PLATFORM_FAMILY -O2 -mcpu=cortex-a53 -march=armv8-a -fno-diagnostics-show-caret -Wno-unused-local-typedefs"
+PLAT_FLAGS="-DSYNO_REALTEK_RTD1619B"
+CFLAGS32="-I${ToolChainInclude32} -D$PLATFORM_FAMILY -O2 -march=armv8-a -fno-diagnostics-show-caret -Wno-unused-local-typedefs"
 LDFLAGS32="-L${ToolChainLib32}"
 CC32=${ToolChainPrefix32}gcc
 CXX32=${ToolChainPrefix32}g++
@@ -53,6 +53,6 @@ READELF64=${ToolChainPrefix64}readelf
 KernelToolchain="gcc850_glibc226_armv8"
 ToolchainTGZList="$KernelToolchain"
 UBootToolchain="gcc483_glibc219_hard"
-SynoKernelConfig="armada37xx"
-SynoGNUSources="armada37xx"
+SynoKernelConfig="rtd1619b"
+SynoGNUSources="rtd1619b"
 QemuStatic="qemu-aarch64-static"

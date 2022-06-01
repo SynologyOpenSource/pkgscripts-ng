@@ -29,8 +29,8 @@ pkg_get_platform() {
 			GRANTLEY)		arch="grantley" ;;
 			CEDARVIEW)		arch="cedarview" ;;
 			AVOTON)			arch="avoton" ;;
-			BRASWELL)			arch="braswell" ;;
-			APOLLOLAKE)			arch="apollolake" ;;
+			BRASWELL)		arch="braswell" ;;
+			APOLLOLAKE)		arch="apollolake" ;;
 			MARVELL_ARMADAXP)	arch="armadaxp" ;;
 			MARVELL_ARMADA370)	arch="armada370" ;;
 			MARVELL_ARMADA375)	arch="armada375" ;;
@@ -40,14 +40,18 @@ pkg_get_platform() {
 			STM_MONACO)             arch="monaco" ;;
 			BROADWELL)		arch="broadwell" ;;
 			BROADWELLNK)		arch="broadwellnk" ;;
-			KVMX64)		arch="kvmx64" ;;
+			KVMX64)			arch="kvmx64" ;;
 			MARVELL_ARMADA38X)      arch="armada38x" ;;
 			REALTEK_RTD1296)        arch="rtd1296" ;;
 			DENVERTON)		arch="denverton" ;;
 			MARVELL_ARMADA37XX)     arch="armada37xx" ;;
 			PURLEY)               	arch="purley" ;;
-			GEMINILAKE)			arch="geminilake" ;;
+			GEMINILAKE)		arch="geminilake" ;;
 			V1000)                  arch="v1000" ;;
+			EPYC7002)		arch="epyc7002" ;;
+			R1000)			arch="r1000" ;;
+			BROADWELLNKV2)		arch="broadwellnkv2" ;;
+			REALTEK_RTD1619B)	arch="rtd1619b" ;;
 			*)			arch="" ;;
 		esac
 	fi
@@ -61,7 +65,7 @@ plat_to_family() {
 	local family=
 
 	case "$plat" in
-		bromolow | cedarview | avoton | braswell | apollolake | grantley | broadwell | kvmx64 | denverton | broadwellnk  | purley | geminilake | v1000 )
+		bromolow | cedarview | avoton | braswell | apollolake | grantley | broadwell | kvmx64 | denverton | broadwellnk  | purley | geminilake | v1000 | r1000 | broadwellnkv2 | epyc7002)
 			family="x86_64"
 			;;
 		evansport )
@@ -70,7 +74,7 @@ plat_to_family() {
 		alpine | alpine4k )
 			family="armv7"
 			;;
-		rtd1296 | armada37xx )
+		rtd1296 | armada37xx | rtd1619b)
 			family="armv8"
 			;;
 		# armv7 not ready platforms.

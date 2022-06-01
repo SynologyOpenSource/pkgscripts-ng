@@ -29,7 +29,7 @@ READELF32=${ToolChainPrefix32}readelf
 ToolChainDir64="/usr/local/aarch64-unknown-linux-gnu"
 ToolChainPrefix64="${ToolChainDir64}/bin/aarch64-unknown-linux-gnu-"
 ToolChainBin64="${ToolChainDir64}/bin"
-ToolChainInclude64="${ToolChainDir64}/aarch64-unknown-linux-gnu/sys-root/usr/include/"
+ToolChainInclude64="${ToolChainDir64}/aarch64-unknown-linux-gnu/sysroot/usr/include/"
 ToolChainSysInclude64=""
 ToolChainLib64="${ToolChainDir64}/aarch64-unknown-linux-gnu/sysroot/lib"
 ToolChainSysRoot64="${ToolChainDir64}/aarch64-unknown-linux-gnu/sysroot/"
@@ -50,7 +50,7 @@ RANLIB64=${ToolChainPrefix64}ranlib
 NM64=${ToolChainPrefix64}nm
 READELF64=${ToolChainPrefix64}readelf
 
-KernelToolchain="gcc730_glibc226_armv8"
+KernelToolchain="gcc850_glibc226_armv8"
 ToolchainTGZList="$KernelToolchain"
 UBootToolchain="gcc483_glibc219_hard"
 SynoKernelConfig="rtd1296"

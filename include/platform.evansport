@@ -24,7 +24,7 @@ RANLIB32=${ToolChainPrefix32}ranlib
 NM32=${ToolChainPrefix32}nm
 READELF32=${ToolChainPrefix32}readelf
 
-KernelToolchain="gcc730_glibc226_i686"
+KernelToolchain="gcc850_glibc226_i686"
 ToolchainTGZList="$KernelToolchain"
 SynoKernelConfig="evansport"
 SynoGNUSources="x86"
