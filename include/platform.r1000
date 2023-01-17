@@ -1,3 +1,4 @@
+SYNO_PRODUCT="DSM"
 ToolChainDir32="/usr/local/i686-pc-linux-gnu"
 ToolChainPrefix32="/usr/local/i686-pc-linux-gnu/bin/i686-pc-linux-gnu-"
 ToolChainBin32="${ToolChainDir32}/bin"
@@ -15,8 +16,9 @@ HOST32=i686-pc-linux-gnu
 PLAT_FLAGS="-DSYNO_R1000"
 CFLAGS32="-D$PLATFORM_FAMILY -O2"
 LDFLAGS32=""
-CC32=${ToolChainPrefix32}gcc
-CXX32=${ToolChainPrefix32}g++
+CC32=${ToolChainPrefix32}wrap-gcc
+CXX32=${ToolChainPrefix32}wrap-g++
+CPP32=${ToolChainPrefix32}cpp
 LD32=${ToolChainPrefix32}ld
 AR32=${ToolChainPrefix32}ar
 STRIP32=${ToolChainPrefix32}strip
@@ -39,8 +41,9 @@ HOST64=x86_64-pc-linux-gnu
 
 CFLAGS64="-D$PLATFORM_FAMILY -O2"
 LDFLAGS64=""
-CC64=${ToolChainPrefix64}gcc
-CXX64=${ToolChainPrefix64}g++
+CC64=${ToolChainPrefix64}wrap-gcc
+CXX64=${ToolChainPrefix64}wrap-g++
+CPP64=${ToolChainPrefix64}cpp
 LD64=${ToolChainPrefix64}ld
 AR64=${ToolChainPrefix64}ar
 STRIP64=${ToolChainPrefix64}strip
@@ -62,15 +65,15 @@ GrubConfigOpt64="--host=x86_64-pc-linux-gnu --target=x86_64-pc-linux-gnu --build
 
 GrubCFLAGS64="-I${GrubToolChainInclude64} -D$PLATFORM_FAMILY"
 GrubLDFLAGS64="-L${GrubToolChainLib64}"
-GrubCC64=${GrubToolChainPrefix64}gcc
-GrubCXX64=${GrubToolChainPrefix64}g++
+GrubCC64=${GrubToolChainPrefix64}wrap-gcc
+GrubCXX64=${GrubToolChainPrefix64}wrap-g++
 GrubLD64=${GrubToolChainPrefix64}ld
 GrubAR64=${GrubToolChainPrefix64}ar
 GrubSTRIP64=${GrubToolChainPrefix64}strip
 GrubRANLIB64=${GrubToolChainPrefix64}ranlib
 GrubNM64=${GrubToolChainPrefix64}nm
 
-KernelToolchain="gcc850_glibc226_x86_64"
-ToolchainTGZList="$KernelToolchain gcc850_glibc226_i686"
+KernelToolchain="gcc1220_glibc236_x86_64"
+ToolchainTGZList="$KernelToolchain gcc1220_glibc236_i686"
 SynoKernelConfig="r1000"
 SynoGNUSources="x86 x64"

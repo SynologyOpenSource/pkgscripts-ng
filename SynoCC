@@ -1,0 +1,25 @@
+#!/bin/bash
+
+deWrapCmd () {
+	echo "${0/-wrap-/-}"
+}
+
+main () {
+	local cmd="$(deWrapCmd)"
+
+	for arg do
+		shift
+		case "$arg" in
+		-L/usr/lib | -L/usr/lib/*)
+			continue
+			;;
+		*)
+			set -- "$@" "$arg"
+			;;
+		esac
+	done
+
+	$cmd "$@"
+}
+
+main "$@"

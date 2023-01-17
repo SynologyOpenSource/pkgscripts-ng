@@ -17,7 +17,6 @@ CFLAGS32="-mfloat-abi=hard -march=armv7-a -mtune=cortex-a9 -mcpu=cortex-a9 -mfpu
 LDFLAGS32=""
 CC32=${ToolChainPrefix32}gcc
 CXX32=${ToolChainPrefix32}g++
-CXXSTANDARD="-std=c++11"
 LD32=${ToolChainPrefix32}ld
 AR32=${ToolChainPrefix32}ar
 STRIP32=${ToolChainPrefix32}strip

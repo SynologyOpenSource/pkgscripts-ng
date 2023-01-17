@@ -8,15 +8,9 @@ __INCLUDE_PLATFORMS__=defined
 Source include/variable
 Source include/check
 
-AllPlatformOptionNames="bromolow cedarview armadaxp armada370 armada375 evansport comcerto2k avoton alpine braswell apollolake grantley alpine4k monaco broadwell kvmx64 armada38x denverton rtd1296 broadwellnk armada37xx purley geminilake v1000 epyc7002 r1000 broadwellnkv2 rtd1619b"
+AllPlatformOptionNames="bromolow avoton alpine braswell apollolake grantley alpine4k monaco broadwell broadwellntbap kvmx64 kvmcloud armada38x denverton rtd1296 broadwellnk armada37xx purley geminilake v1000 epyc7002 r1000 broadwellnkv2 rtd1619b"
 
 AllPlatforms="	bromolow	BROMOLOW			linux-3.10.x    	Intel Bromolow
-		cedarview	CEDARVIEW			linux-3.10.x    	Intel Cedarview
-		armadaxp	MARVELL_ARMADAXP		linux-3.x		Marvell armadaxp
-		armada370	MARVELL_ARMADA370		linux-3.x		Marvell armada370
-		armada375	MARVELL_ARMADA375		linux-3.x		Marvell armada375
-		evansport	EVANSPORT			linux-3.x		Intel Evansport
-		comcerto2k	MINDSPEED_COMCERTO2K		linux-3.x		MindSpeed comcerto 2000
 		avoton		AVOTON				linux-3.10.x		Intel Avoton
 		alpine		ALPINE				linux-3.10.x-bsp	AnnapurnaLabs Alpine
 		alpine4k	ALPINE				linux-3.10.x-bsp	AnnapurnaLabs Alpine
@@ -25,8 +19,10 @@ AllPlatforms="	bromolow	BROMOLOW			linux-3.10.x    	Intel Bromolow
 		grantley	GRANTLEY			linux-3.10.x		Intel Grantley
 		broadwell	BROADWELL			linux-4.4.x		Intel Broadwell
 		broadwellnk	BROADWELLNK			linux-4.4.x		Intel Broadwell with new kernel
+		broadwellntbap  BROADWELLNTBAP                  linux-4.4.x             Intel Broadwell with ntb kernel config in AP mode
 		monaco  	STM_MONACO			linux-3.10.x-bsp	STM Monaco H412
 		kvmx64		KVMX64				linux-4.4.x		Virtual Machine
+		kvmcloud        KVMCLOUD                        linux-4.4.x             Virtual Machine on cloud
 		armada38x	MARVELL_ARMADA38X		linux-3.10.x-bsp	Marvell armada38x
 		rtd1296		REALTEK_RTD1296			linux-4.4.x		Realtek rtd1296
 		denverton	DENVERTON			linux-4.4.x		Intel Denverton
@@ -34,10 +30,10 @@ AllPlatforms="	bromolow	BROMOLOW			linux-3.10.x    	Intel Bromolow
 		armada37xx	MARVELL_ARMADA37XX		linux-4.4.x		Marvell armada37xx
 		geminilake  GEMINILAKE			linux-4.4.x		Intel Gemini Lake
 		v1000           V1000                           linux-4.4.x             AMD Ryzen Embedded V1000
-		epyc7002	EPYC7002			linux-5.10.x		AMD x86 Linux Linux 5.10.55 (epyc7002)
-		r1000		R1000				linux-4.4.x		AMD x86 Linux 4.4.180 (r1000)
-		broadwellnkv2	BROADWELLNKV2			linux-4.4.x		Intel x86 Linux 4.4.180 (Broadwellnkv2)
-		rtd1619b	REALTEK_RTD1619B		linux-5.10.x		Realtek RTD16xxb Linux 5.10.55
+		epyc7002	EPYC7002			linux-5.10.x		AMD EPYC embedded 7002 Rome
+		r1000		R1000				linux-4.4.x		AMD Ryzen Embedded R1000
+		broadwellnkv2	BROADWELLNKV2			linux-4.4.x		Intel Broadwell with port mapping v2
+		rtd1619b	REALTEK_RTD1619B		linux-5.10.x		Realtek rtd1619b
 		"
 
 #

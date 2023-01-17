@@ -6,13 +6,13 @@ __INCLUDE_APPLY_ENV__=defined
 
 Source include/check
 
-FunCreateCCacheWrap()
-{
-	for bin in $*
-	do
-		[ -z "$bin" ] && continue
-		ln -fs /usr/bin/ccache-wrap $bin
-	done
+_CreateWrapLink() {
+        local target="$1"
+        shift
+        for bin in "$@"; do
+                [ -z "$bin" ] && continue
+                ln -fs "$target" "$bin"
+        done
 }
 
 _AssignArch() {
@@ -106,17 +106,9 @@ ApplyBuildEnv() {
 	fi
 	[ -z "$SYNO_XTRACFLAGS" ] && SYNO_XTRACFLAGS="-g"
 
-	CC="${ToolChainPrefix}ccache-gcc"
-	CXX="${ToolChainPrefix}ccache-g++"
-	if [ -n "$StaticPrefix" ]; then
-		STATIC_CC="${StaticPrefix}ccache-gcc"
-	fi
-	if [ -n "${GrubToolChainPrefix}" ]; then
-		GrubCC="${GrubToolChainPrefix}ccache-gcc"
-		GrubCXX="${GrubToolChainPrefix}ccache-g++"
-	fi
-
-	FunCreateCCacheWrap "${CC}" "${CXX}" "${STATIC_CC}" "${GrubCC}" "${GrubCXX}" /usr/bin/ccache-gcc /usr/bin/ccache-g++
+	_CreateWrapLink "${ScriptsDir}/SynoCC" \
+		"${CC}" "${CXX}" \
+		"${GrubCC}" "${GrubCXX}"
 
 	CFLAGS="$CFLAGS -DBUILD_ARCH=${arch} -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64"
 	if [ -n "$SYNO_XTRACFLAGS" ]; then

@@ -1,3 +1,4 @@
+SYNO_PRODUCT="DSM"
 ToolChainDir32="/usr/local/aarch64-unknown-linux-gnu"
 ToolChainPrefix32="${ToolChainDir32}/bin/aarch64-unknown-linux-gnu-"
 ToolChainBin32="${ToolChainDir32}/bin"
@@ -16,8 +17,9 @@ HOST32=aarch64-unknown-linux-gnu/
 PLAT_FLAGS="-DSYNO_MARVELL_ARMADA37XX"
 CFLAGS32="-I${ToolChainInclude32} -D$PLATFORM_FAMILY -O2 -mcpu=cortex-a53 -march=armv8-a -fno-diagnostics-show-caret -Wno-unused-local-typedefs"
 LDFLAGS32="-L${ToolChainLib32}"
-CC32=${ToolChainPrefix32}gcc
-CXX32=${ToolChainPrefix32}g++
+CC32=${ToolChainPrefix32}wrap-gcc
+CXX32=${ToolChainPrefix32}wrap-g++
+CPP32=${ToolChainPrefix32}cpp
 LD32=${ToolChainPrefix32}ld
 AR32=${ToolChainPrefix32}ar
 STRIP32=${ToolChainPrefix32}strip
@@ -41,8 +43,9 @@ HOST64=aarch64-unknown-linux-gnu
 
 CFLAGS64="-D$PLATFORM_FAMILY -O2"
 LDFLAGS64=""
-CC64=${ToolChainPrefix64}gcc
-CXX64=${ToolChainPrefix64}g++
+CC64=${ToolChainPrefix64}wrap-gcc
+CXX64=${ToolChainPrefix64}wrap-g++
+CPP64=${ToolChainPrefix64}cpp
 LD64=${ToolChainPrefix64}ld
 AR64=${ToolChainPrefix64}ar
 STRIP64=${ToolChainPrefix64}strip
@@ -50,7 +53,7 @@ RANLIB64=${ToolChainPrefix64}ranlib
 NM64=${ToolChainPrefix64}nm
 READELF64=${ToolChainPrefix64}readelf
 
-KernelToolchain="gcc850_glibc226_armv8"
+KernelToolchain="gcc1220_glibc236_armv8"
 ToolchainTGZList="$KernelToolchain"
 UBootToolchain="gcc483_glibc219_hard"
 SynoKernelConfig="armada37xx"
