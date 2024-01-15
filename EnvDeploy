@@ -8,6 +8,7 @@ import os
 import subprocess
 import glob
 import shutil
+import json
 
 sys.path.append(os.path.realpath(os.path.dirname(__file__)) + "/include/python")
 import BuildEnv
@@ -23,7 +24,7 @@ sys.stderr = Tee(sys.stderr, log_file, move=False)
 
 VersionMap = 'version_map'
 DownloadDir = os.path.join(BuildEnv.SynoBase, 'toolkit_tarballs')
-ToolkitServer = 'https://sourceforge.net/projects/dsgpl/files/toolkit'
+ToolkitServer = 'https://dataupdate7.synology.com/toolchain/v1/get_download_list?identify=toolkit'
 Product = "DSM"
 
 
@@ -66,13 +67,8 @@ class ToolkitDownloader:
         if not os.path.isdir(DownloadDir):
             os.makedirs(DownloadDir)
 
-    def _join_download_url(self, *patterns):
-        url = ToolkitServer
-        for pattern in list(patterns):
-            if not pattern:
-                continue
-            url += '/%s' % pattern
-        return url
+    def _join_download_url(self, platform):
+        return '%s&version=%s&platform=%s' % (ToolkitServer, self.version, platform)
 
     def _download(self, url):
         print("Download... " + url)
@@ -81,12 +77,14 @@ class ToolkitDownloader:
         else:
             reporthook = self.dl_progress
 
-        try:
-            dest = os.path.join(DownloadDir, url.split("/")[-1])
-            urllib.request.urlretrieve(url, dest, reporthook=reporthook)
-            print("Download destination: " + dest)
-        except urllib.error.HTTPError:
-            raise DownloadToolkitError("Failed to download toolkit: " + url)
+        with urllib.request.urlopen(url) as response:
+            data = json.loads(response.read())
+            for link in data["fileList"]:
+                try:
+                    urllib.request.urlretrieve(link, os.path.join(
+                    DownloadDir, link.split("/")[-1]), reporthook=reporthook)
+                except urllib.error.HTTPError as e:
+                    raise DownloadToolkitError("Failed to download toolkit: %s , reason: %s" % (link, str(e)))
 
     def dl_progress(self, count, dl_size, total_size):
         percent = int(count * dl_size * 50 / total_size)
@@ -101,7 +99,7 @@ class ToolkitDownloader:
             return False
 
     def append_base_tarball(self):
-        self._download_list.append(self._join_download_url(Product + self.version, self.tarball_manager.base_tarball_name))
+        self._download_list.append(self._join_download_url('base'))
 
     def append_env_tarball(self):
         self.append_platform_tarball_list(self.tarball_manager.get_env_tarball_name)
@@ -111,7 +109,7 @@ class ToolkitDownloader:
 
     def append_platform_tarball_list(self, get_tarball_name):
         for platform in self.platforms:
-            self._download_list.append(self._join_download_url(Product + self.version, get_tarball_name(platform)))
+            self._download_list.append(self._join_download_url(platform))
 
     def download_toolkit(self):
         for url in self._download_list:
