@@ -1,0 +1,39 @@
+{
+	"extends": "eslint:recommended",
+	"parserOptions": {
+		"ecmaVersion": 2020
+	},
+	"env": {
+		"browser": true,
+		"es6": true
+	},
+	"rules": {
+		"no-unused-vars": ["off", {
+			"vars": "all",
+			"args": "none"
+		}],
+		"no-mixed-spaces-and-tabs": "off",
+		"no-empty": "off",
+		"no-prototype-builtins": "off",
+		"yoda": "off"
+	},
+	"globals": {
+		"SYNO": true,
+		"Ext": true,
+		"Vue": true,
+		"_S": true,
+		"_D": true,
+		"_JSLIBSTR": true,
+		"_WFT": false,
+		"_AST": true,
+		"_VCT": true,
+		"_VST": true,
+		"PhotoStation": true,
+		"Main": true,
+		"_PST": true,
+		"_T": true,
+		"_TT": true,
+		"Promise": true,
+		"synowebapi": true
+	}
+}
