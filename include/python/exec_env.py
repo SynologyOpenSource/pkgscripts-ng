@@ -63,9 +63,13 @@ class ExecuteEnv(object):
 
 class ChrootEnv(ExecuteEnv):
     def execute(self, cmd, display=False, logfile="", **kwargs):
-        mount_point = os.path.join(self.chroot_dir, 'proc')
-        if not os.path.ismount(mount_point):
-            subprocess.check_call(['mount', '-t', 'proc', 'none', mount_point])
+        proc_mount_point = os.path.join(self.chroot_dir, 'proc')
+        if not os.path.ismount(proc_mount_point):
+            subprocess.check_call(['mount', '-t', 'proc', 'none', proc_mount_point])
+
+        dev_mount_point = os.path.join(self.chroot_dir, 'dev')
+        if not os.path.ismount(dev_mount_point):
+            subprocess.check_call(['mount', '--bind', '/dev', dev_mount_point])
 
         if isinstance(cmd, list):
             cmd = ['chroot', self.chroot_dir] + cmd
