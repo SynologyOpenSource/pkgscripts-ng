@@ -120,6 +120,7 @@ ApplyBuildEnv() {
 	CFLAGS="$CFLAGS $PLAT_FLAGS -DSYNO_PLATFORM=${BUILD_TARGET}"
 	CXXFLAGS="${CFLAGS} ${CXXSTANDARD}"
 	GOROOT="/usr/lib/go"
+	export PYTHONIOENCODING=utf-8
 }
 
 ApplyInstallEnv() {
