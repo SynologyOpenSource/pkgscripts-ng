@@ -52,6 +52,7 @@ pkg_get_platform() {
 			R1000)			arch="r1000" ;;
 			BROADWELLNKV2)		arch="broadwellnkv2" ;;
 			REALTEK_RTD1619B)	arch="rtd1619b" ;;
+			BROADWELLNTBAP)		arch="broadwellntbap" ;;
 			*)			arch="" ;;
 		esac
 	fi
@@ -65,7 +66,7 @@ plat_to_family() {
 	local family=
 
 	case "$plat" in
-		bromolow | cedarview | avoton | braswell | apollolake | grantley | broadwell | kvmx64 | denverton | broadwellnk  | purley | geminilake | v1000 | r1000 | broadwellnkv2 | epyc7002)
+		bromolow | cedarview | avoton | braswell | apollolake | grantley | broadwell | kvmx64 | denverton | broadwellnk  | purley | geminilake | v1000 | r1000 | broadwellnkv2 | epyc7002 | broadwellntbap)
 			family="x86_64"
 			;;
 		evansport )
