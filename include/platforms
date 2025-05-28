@@ -8,14 +8,14 @@ __INCLUDE_PLATFORMS__=defined
 Source include/variable
 Source include/check
 
-AllPlatformOptionNames="bromolow avoton alpine braswell apollolake grantley alpine4k monaco broadwell broadwellntbap kvmx64 kvmcloud armada38x denverton rtd1296 broadwellnk armada37xx purley geminilake v1000 epyc7002 r1000 broadwellnkv2 rtd1619b"
+AllPlatformOptionNames="bromolow avoton alpine braswell apollolake grantley alpine4k monaco broadwell broadwellntbap kvmx64 kvmcloud armada38x denverton rtd1296 broadwellnk armada37xx purley geminilake v1000 epyc7002 r1000 broadwellnkv2 rtd1619b geminilakenk r1000nk v1000nk"
 
 AllPlatforms="	bromolow	BROMOLOW			linux-3.10.x    	Intel Bromolow
 		avoton		AVOTON				linux-3.10.x		Intel Avoton
 		alpine		ALPINE				linux-3.10.x-bsp	AnnapurnaLabs Alpine
 		alpine4k	ALPINE				linux-3.10.x-bsp	AnnapurnaLabs Alpine
 		braswell	BRASWELL			linux-3.10.x		Intel Braswell
-		apollolake  APOLLOLAKE			linux-4.4.x		Intel Apollo Lake
+		apollolake	APOLLOLAKE			linux-4.4.x		Intel Apollo Lake
 		grantley	GRANTLEY			linux-3.10.x		Intel Grantley
 		broadwell	BROADWELL			linux-4.4.x		Intel Broadwell
 		broadwellnk	BROADWELLNK			linux-4.4.x		Intel Broadwell with new kernel
@@ -28,12 +28,15 @@ AllPlatforms="	bromolow	BROMOLOW			linux-3.10.x    	Intel Bromolow
 		denverton	DENVERTON			linux-4.4.x		Intel Denverton
 		purley          PURLEY                          linux-4.4.x             Intel Purley
 		armada37xx	MARVELL_ARMADA37XX		linux-4.4.x		Marvell armada37xx
-		geminilake  GEMINILAKE			linux-4.4.x		Intel Gemini Lake
+		geminilake	GEMINILAKE			linux-4.4.x		Intel Gemini Lake
 		v1000           V1000                           linux-4.4.x             AMD Ryzen Embedded V1000
 		epyc7002	EPYC7002			linux-5.10.x		AMD EPYC embedded 7002 Rome
 		r1000		R1000				linux-4.4.x		AMD Ryzen Embedded R1000
 		broadwellnkv2	BROADWELLNKV2			linux-4.4.x		Intel Broadwell with port mapping v2
 		rtd1619b	REALTEK_RTD1619B		linux-5.10.x		Realtek rtd1619b
+		geminilakenk	GEMINILAKENK			linux-5.10.x		Intel Gemini Lake with kernel 5.10
+		r1000nk		R1000NK				linux-5.10.x		AMD Ryzen Embedded R1000
+		v1000nk		V1000NK				linux-5.10.x		AMD Ryzen Embedded V1000 with kernel 5.10
 		"
 
 #
