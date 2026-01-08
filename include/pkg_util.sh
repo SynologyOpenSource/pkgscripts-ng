@@ -75,10 +75,11 @@ pkg_get_platform() { # [path of env.mak (default: /env.mak)]
 			KVMX64)			arch="kvmx64" ;;
 			GRANTLEY)		arch="grantley" ;;
 			DOCKERX64)		arch="dockerx64" ;;
-            DENVERTON)      arch="denverton";;
-            APOLLOLAKE)     arch="apollolake";;
-            RED1296)        arch="rtd1296";;
-			*)			arch="" ;;
+			DENVERTON)		arch="denverton";;
+			APOLLOLAKE)		arch="apollolake";;
+			RED1296)		arch="rtd1296";;
+			BROADWELLNK)	arch="broadwellnk"
+			*)				arch="" ;;
 		esac
 	fi
 
@@ -90,8 +91,8 @@ plat_to_unified_plat() {
 	local unified_plat=
 
 	case "$plat" in
-		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley | denverton | apollolake | rtd1296)
-			unified_plat="x86 bromolow cedarview avoton braswell broadwell dockerx64 kvmx64 grantley denverton apollolake rtd1296"
+		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley | denverton | apollolake | rtd1296 | broadwellnk)
+			unified_plat="x86 bromolow cedarview avoton braswell broadwell dockerx64 kvmx64 grantley denverton apollolake rtd1296 broadwellnk"
 			;;
 		# alpine and alpine4k use same define.
 		alpine | alpine4k )
@@ -109,7 +110,7 @@ plat_to_family() {
 	local family=
 
 	case "$plat" in
-		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley | denverton | apollolake | rtd1296)
+		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley | denverton | apollolake | rtd1296 | broadwellnk)
 			family="x86_64"
 			;;
 		evansport )
@@ -211,7 +212,7 @@ pkg_get_spk_unified_platform() { # [path of env.mak (default: /env.mak)]
 		88f6281)
 			spk_unified_platform="88f628x"
 			;;
-		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley | denverton | apollolake | rtd1296)
+		x86 | bromolow | cedarview | avoton | braswell | broadwell | dockerx64 | kvmx64 | grantley | denverton | apollolake | rtd1296 | broadwellnk)
 			spk_unified_platform="x64"
 			;;
 		alpine | alpine4k )
