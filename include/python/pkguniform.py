@@ -198,7 +198,7 @@ class PackageInstaller(ChrootRunner):
 
     def _get_command(self, platform):
         cmd = ['env'] + ['PackageName=' + self.package.name,
-                                         os.path.join(PkgScripts, 'SynoInstall')]
+                                         os.path.join(PkgScripts, 'SynoInstall'), '--' + platform]
         if self.install_opt:
             cmd += self.install_opt
 

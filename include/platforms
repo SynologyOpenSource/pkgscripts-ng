@@ -8,7 +8,7 @@ __INCLUDE_PLATFORMS__=defined
 Source include/variable
 Source include/check
 
-AllPlatformOptionNames="bromolow avoton alpine braswell apollolake grantley alpine4k monaco broadwell broadwellntbap kvmx64 kvmcloud armada38x denverton rtd1296 broadwellnk armada37xx purley geminilake v1000 epyc7002 r1000 broadwellnkv2 rtd1619b geminilakenk r1000nk v1000nk"
+AllPlatformOptionNames="bromolow avoton alpine braswell apollolake grantley alpine4k monaco broadwell broadwellntbap kvmx64 kvmcloud armada38x denverton rtd1296 broadwellnk armada37xx purley geminilake v1000 epyc7002 r1000 broadwellnkv2 rtd1619b geminilakenk r1000nk v1000nk epyc7003ntb"
 
 AllPlatforms="	bromolow	BROMOLOW			linux-3.10.x    	Intel Bromolow
 		avoton		AVOTON				linux-3.10.x		Intel Avoton
@@ -37,6 +37,7 @@ AllPlatforms="	bromolow	BROMOLOW			linux-3.10.x    	Intel Bromolow
 		geminilakenk	GEMINILAKENK			linux-5.10.x		Intel Gemini Lake with kernel 5.10
 		r1000nk		R1000NK				linux-5.10.x		AMD Ryzen Embedded R1000
 		v1000nk		V1000NK				linux-5.10.x		AMD Ryzen Embedded V1000 with kernel 5.10
+		epyc7003ntb	EPYC7003NTB			linux-5.10.x		AMD EPYC embedded 7003 Milan with NTB
 		"
 
 #
@@ -83,26 +84,29 @@ AskPlatform()
 			fi
 		done
 	fi
-	if [ -z "${!INDEX}" -a -f /root/.bashrc -a -f /root/.chroot ]; then
-		PLATFORM_ABBR=$(grep "CCACHE_DIR=" /root/.bashrc | cut -d'"' -f2 | cut -d'/' -f3)
-		INDEX=AbbrHash_${PLATFORM_ABBR}
-		if [ -n "${!INDEX}" ]; then
-			BUILD_TARGET=${TargetArray[${!INDEX}]}
-			BUILD_OPT="--${PLATFORM_ABBR}"
-		else
-			echo "Failed to detect platform (\$platform) in /root/.bashrc"
-		fi
-		# Since alpine family share the same SYNO_PLATFORM, the above table scanning
-		# falls back to the latest ALPINE entry (alpine4k), we have to use another
-		# way to distinguish them
-		if [ "${BUILD_TARGET}" = "ALPINE" ]; then
-			local platform="alpine"
-			cat /root/.bashrc | grep "PS1" | grep "alpine4k" > /dev/null
-			if [ $? -eq 0 ]; then
-				platform="alpine4k"
+
+	if [ -z "${INDEX}" ] || [ -z "${!INDEX}" ]; then
+		if [ -f /root/.bashrc -a -f /root/.chroot ]; then
+			PLATFORM_ABBR=$(grep "CCACHE_DIR=" /root/.bashrc | cut -d'"' -f2 | cut -d'/' -f3)
+			INDEX=AbbrHash_${PLATFORM_ABBR}
+			if [ -n "${!INDEX}" ]; then
+				BUILD_TARGET=${TargetArray[${!INDEX}]}
+				BUILD_OPT="--${PLATFORM_ABBR}"
+			else
+				echo "Failed to detect platform (\$platform) in /root/.bashrc"
 			fi
-			PLATFORM_ABBR="${platform}"
-			BUILD_OPT="--${platform}"
+			# Since alpine family share the same SYNO_PLATFORM, the above table scanning
+			# falls back to the latest ALPINE entry (alpine4k), we have to use another
+			# way to distinguish them
+			if [ "${BUILD_TARGET}" = "ALPINE" ]; then
+				local platform="alpine"
+				cat /root/.bashrc | grep "PS1" | grep "alpine4k" > /dev/null
+				if [ $? -eq 0 ]; then
+					platform="alpine4k"
+				fi
+				PLATFORM_ABBR="${platform}"
+				BUILD_OPT="--${platform}"
+			fi
 		fi
 	fi
 
