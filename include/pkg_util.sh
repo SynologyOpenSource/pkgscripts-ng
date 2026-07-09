@@ -56,7 +56,8 @@ pkg_get_platform() {
 			GEMINILAKENK)		arch="geminilakenk" ;;
 			R1000NK)		arch="r1000nk" ;;
 			V1000NK)		arch="v1000nk" ;;
-            ICELAKED)		arch="icelaked" ;;
+			ICELAKED)		arch="icelaked" ;;
+			EPYC7003)		arch="epyc7003"	;;
 			*)			arch="" ;;
 		esac
 	fi
@@ -70,7 +71,7 @@ plat_to_family() {
 	local family=
 
 	case "$plat" in
-		bromolow | cedarview | avoton | braswell | apollolake | grantley | broadwell | kvmx64 | denverton | broadwellnk  | purley | geminilake | v1000 | r1000 | broadwellnkv2 | epyc7002 | broadwellntbap | geminilakenk | r1000nk | v1000nk | icelaked)
+		bromolow | cedarview | avoton | braswell | apollolake | grantley | broadwell | kvmx64 | denverton | broadwellnk  | purley | geminilake | v1000 | r1000 | broadwellnkv2 | epyc7002 | broadwellntbap | geminilakenk | r1000nk | v1000nk | icelaked | epyc7003 )
 			family="x86_64"
 			;;
 		evansport )
